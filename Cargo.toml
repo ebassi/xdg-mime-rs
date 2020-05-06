@@ -1,0 +1,22 @@
+[package]
+name = "xdg-mime"
+description = "A library for loading and querying the XDG shared MIME database"
+version = "0.1.0"
+authors = ["Emmanuele Bassi <ebassi@gnome.org>"]
+edition = "2018"
+homepage = "https://ebassi.github.io/xdg-mime-rs"
+repository = "https://github.com/ebassi/xdg-mime-rs"
+documentation = "https://docs.rs/xdg_mime"
+readme = "README.md"
+keywords = ["linux", "mime", "xdg", "configuration"]
+license = "MIT"
+
+[lib]
+name = "xdg_mime"
+path = "src/lib.rs"
+doctest = false
+
+[dependencies]
+glob = "0.3.0"
+nom = "^5"
+unicase = "2.3.0"
