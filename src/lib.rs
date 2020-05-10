@@ -192,9 +192,8 @@ impl SharedMimeInfo {
     pub fn lookup_icon_names(&self, mime_type: &str) -> Vec<String> {
         let mut res = Vec::new();
 
-        match icon::find_icon(&self.icons, &mime_type) {
-            Some(v) => res.push(v),
-            None => {}
+        if let Some(v) = icon::find_icon(&self.icons, &mime_type) {
+            res.push(v);
         };
 
         res.push(mime_type.replace("/", "-"));
@@ -238,13 +237,10 @@ impl SharedMimeInfo {
         let mut res = Vec::new();
         res.push(unaliased.clone());
 
-        match self.parents.lookup(unaliased) {
-            Some(v) => {
-                for parent in v {
-                    res.push(parent.clone());
-                }
+        if let Some(parents) = self.parents.lookup(unaliased) {
+            for parent in parents {
+                res.push(parent.clone());
             }
-            None => {}
         };
 
         Some(res)
