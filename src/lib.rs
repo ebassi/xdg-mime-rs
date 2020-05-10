@@ -25,13 +25,13 @@ mod magic;
 mod parent;
 
 /// Convenience identifier for an unknown MIME type.
-pub static UNKNOWN_TYPE: &'static str = "application/octet-stream";
+pub static UNKNOWN_TYPE: &str = "application/octet-stream";
 
 /// Convenience identifier for the MIME type for an empty file.
-pub static EMPTY_TYPE: &'static str = "application/x-zerosize";
+pub static EMPTY_TYPE: &str = "application/x-zerosize";
 
 /// Convenience identifier for the MIME type for a plain text file.
-pub static TEXT_PLAIN_TYPE: &'static str = "text/plain";
+pub static TEXT_PLAIN_TYPE: &str = "text/plain";
 
 pub struct SharedMimeInfo {
     aliases: alias::AliasesList,
