@@ -253,16 +253,14 @@ impl SharedMimeInfo {
     /// Retrieves the list of matching MIME types for the given file name,
     /// without looking at the data inside the file.
     pub fn get_mime_types_from_file_name(&self, file_name: &str) -> Vec<String> {
-        let matching_types = match self.globs.lookup_mime_type_for_file_name(file_name) {
+        match self.globs.lookup_mime_type_for_file_name(file_name) {
             Some(v) => v,
             None => {
                 let mut res = Vec::new();
                 res.push(UNKNOWN_TYPE.to_string());
                 res
             }
-        };
-
-        matching_types
+        }
     }
 
     /// Retrieves the MIME type for the given data.
