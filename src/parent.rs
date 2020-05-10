@@ -34,8 +34,8 @@ impl Subclass {
         };
 
         Some(Subclass {
-            mime_type: mime_type,
-            parent_type: parent_type,
+            mime_type,
+            parent_type,
         })
     }
 }
