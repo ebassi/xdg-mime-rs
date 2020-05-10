@@ -15,13 +15,14 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 extern crate dirs;
-#[macro_use] extern crate nom;
+#[macro_use]
+extern crate nom;
 
 mod alias;
 mod glob;
 mod icon;
-mod parent;
 mod magic;
+mod parent;
 
 /// Convenience identifier for an unknown MIME type.
 pub static UNKNOWN_TYPE: &'static str = "application/octet-stream";
@@ -109,13 +110,11 @@ impl SharedMimeInfo {
         db.load_directory(data_home);
 
         let data_dirs = match env::var_os("XDG_DATA_DIRS") {
-            Some(v) => {
-                env::split_paths(&v).collect()
-            }
-            None => {
-                vec![PathBuf::from("/usr/local/share"),
-                     PathBuf::from("/usr/share")]
-            }
+            Some(v) => env::split_paths(&v).collect(),
+            None => vec![
+                PathBuf::from("/usr/local/share"),
+                PathBuf::from("/usr/share"),
+            ],
         };
 
         for dir in data_dirs {
@@ -124,7 +123,6 @@ impl SharedMimeInfo {
 
         db
     }
-
 
     /// Load all the MIME information under @directory, and create a new
     /// SharedMimeInfo for it. This method is only really useful for
