@@ -82,7 +82,7 @@ impl Glob {
         let glob = glob.into();
 
         Glob {
-            mime_type: mime_type,
+            mime_type,
             glob: determine_type(glob),
             weight: 50,
             case_sensitive: false,
@@ -94,9 +94,9 @@ impl Glob {
         let glob = glob.into();
 
         Glob {
-            mime_type: mime_type,
+            mime_type,
             glob: determine_type(glob),
-            weight: weight,
+            weight,
             case_sensitive: false,
         }
     }
@@ -106,9 +106,9 @@ impl Glob {
         let glob = glob.into();
 
         Glob {
-            mime_type: mime_type,
+            mime_type,
             glob: determine_type(glob),
-            weight: weight,
+            weight,
             case_sensitive: cs,
         }
     }
@@ -143,7 +143,7 @@ impl Glob {
 
         Some(Glob {
             glob: determine_type(glob),
-            mime_type: mime_type,
+            mime_type,
             weight: 50,
             case_sensitive: false,
         })
@@ -199,9 +199,9 @@ impl Glob {
 
         Some(Glob {
             glob: determine_type(glob),
-            weight: weight,
-            case_sensitive: case_sensitive,
-            mime_type: mime_type,
+            weight,
+            case_sensitive,
+            mime_type,
         })
     }
 
