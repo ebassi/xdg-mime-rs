@@ -48,43 +48,22 @@ impl SharedMimeInfo {
         mime_path.push(directory);
         mime_path.push("mime");
 
-        let mut alias_file = mime_path.clone();
-        alias_file.push("aliases");
-        let aliases = alias::read_aliases_from_file(alias_file);
+        let aliases = alias::read_aliases_from_dir(&mime_path);
         self.aliases.add_aliases(aliases);
 
-        let mut icons_file = mime_path.clone();
-        icons_file.push("icons");
-        let icons = icon::read_icons_from_file(icons_file);
+        let icons = icon::read_icons_from_dir(&mime_path, false);
         self.icons.extend(icons);
 
-        icons_file = mime_path.clone();
-        icons_file.push("generic-icons");
-        let generic_icons = icon::read_icons_from_file(icons_file);
+        let generic_icons = icon::read_icons_from_dir(&mime_path, true);
         self.generic_icons.extend(generic_icons);
 
-        let mut subclasses_file = mime_path.clone();
-        subclasses_file.push("subclasses");
-        let subclasses = parent::read_subclasses_from_file(subclasses_file);
+        let subclasses = parent::read_subclasses_from_dir(&mime_path);
         self.parents.add_subclasses(subclasses);
 
-        let mut glob_v2_file = mime_path.clone();
-        glob_v2_file.push("globs2");
-        let globs = match glob::read_globs_v2_from_file(glob_v2_file) {
-            Some(v) => v,
-            None => {
-                let mut glob_v1_file = mime_path.clone();
-                glob_v1_file.push("globs");
-
-                glob::read_globs_v1_from_file(glob_v1_file).unwrap_or(Vec::new())
-            }
-        };
-
+        let globs = glob::read_globs_from_dir(&mime_path);
         self.globs.add_globs(globs);
 
-        let mut magic_file = mime_path.clone();
-        magic_file.push("magic");
-        let magic_entries = magic::read_magic_from_file(magic_file);
+        let magic_entries = magic::read_magic_from_dir(&mime_path);
         self.magic.extend(magic_entries);
     }
 
@@ -132,44 +111,22 @@ impl SharedMimeInfo {
         mime_path.push(directory);
         mime_path.push("mime");
 
-        let mut alias_file = mime_path.clone();
-        alias_file.push("aliases");
         let mut alias_list = alias::AliasesList::new();
-        let aliases = alias::read_aliases_from_file(alias_file);
+        let aliases = alias::read_aliases_from_dir(&mime_path);
         alias_list.add_aliases(aliases);
 
-        let mut icons_file = mime_path.clone();
-        icons_file.push("icons");
-        let icons = icon::read_icons_from_file(icons_file);
+        let icons = icon::read_icons_from_dir(&mime_path, false);
+        let generic_icons = icon::read_icons_from_dir(&mime_path, true);
 
-        icons_file = mime_path.clone();
-        icons_file.push("generic-icons");
-        let generic_icons = icon::read_icons_from_file(icons_file);
-
-        let mut subclasses_file = mime_path.clone();
-        subclasses_file.push("subclasses");
         let mut parents_map = parent::ParentsMap::new();
-        let subclasses = parent::read_subclasses_from_file(subclasses_file);
+        let subclasses = parent::read_subclasses_from_dir(&mime_path);
         parents_map.add_subclasses(subclasses);
 
-        let mut glob_v2_file = mime_path.clone();
-        glob_v2_file.push("globs2");
-        let globs = match glob::read_globs_v2_from_file(glob_v2_file) {
-            Some(v) => v,
-            None => {
-                let mut glob_v1_file = mime_path.clone();
-                glob_v1_file.push("globs");
-
-                glob::read_globs_v1_from_file(glob_v1_file).unwrap_or(Vec::new())
-            }
-        };
-
         let mut glob_map = glob::GlobMap::new();
+        let globs = glob::read_globs_from_dir(&mime_path);
         glob_map.add_globs(globs);
 
-        let mut magic_file = mime_path.clone();
-        magic_file.push("magic");
-        let magic_entries = magic::read_magic_from_file(magic_file);
+        let magic_entries = magic::read_magic_from_dir(&mime_path);
 
         SharedMimeInfo {
             aliases: alias_list,
