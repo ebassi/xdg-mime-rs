@@ -110,7 +110,7 @@ pub fn read_icons_from_dir<P: AsRef<Path>>(dir: P, generic: bool) -> Vec<Icon> {
     read_icons_from_file(icons_file)
 }
 
-pub fn find_icon(icons: &Vec<Icon>, mime_type: &str) -> Option<String> {
+pub fn find_icon(icons: &[Icon], mime_type: &str) -> Option<String> {
     for icon in icons {
         if icon.mime_type == mime_type {
             return Some(icon.icon_name.clone());
