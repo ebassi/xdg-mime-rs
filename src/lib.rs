@@ -272,8 +272,12 @@ impl SharedMimeInfo {
     /// Checks whether two MIME types are equal, taking into account
     /// eventual aliases.
     pub fn mime_type_equal(&self, mime_a: &str, mime_b: &str) -> bool {
-        let unaliased_a = self.unalias_mime_type(mime_a).unwrap_or(mime_a.to_string());
-        let unaliased_b = self.unalias_mime_type(mime_b).unwrap_or(mime_b.to_string());
+        let unaliased_a = self
+            .unalias_mime_type(mime_a)
+            .unwrap_or_else(|| mime_a.to_string());
+        let unaliased_b = self
+            .unalias_mime_type(mime_b)
+            .unwrap_or_else(|| mime_b.to_string());
 
         unaliased_a == unaliased_b
     }
