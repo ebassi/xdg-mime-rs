@@ -358,19 +358,29 @@ mod tests {
     #[test]
     fn glob_type() {
         assert_eq!(
-            determine_type("Makefile"),
-            GlobType::Literal("Makefile".to_string())
-        );
-
-        assert_eq!(
             determine_type("*.gif"),
             GlobType::Simple(".gif".to_string())
         );
-
         assert_eq!(
-            determine_type("x*.[ch]"),
-            GlobType::Full(Pattern::new("x*.[ch]").unwrap())
-        )
+            determine_type("Foo*.gif"),
+            GlobType::Full(Pattern::new("Foo*.gif").unwrap())
+        );
+        assert_eq!(
+            determine_type("*[4].gif"),
+            GlobType::Full(Pattern::new("*[4].gif").unwrap())
+        );
+        assert_eq!(
+            determine_type("Makefile"),
+            GlobType::Literal("Makefile".to_string())
+        );
+        assert_eq!(
+            determine_type("sldkfjvlsdf\\\\slkdjf"),
+            GlobType::Full(Pattern::new("sldkfjvlsdf\\\\slkdjf").unwrap())
+        );
+        assert_eq!(
+            determine_type("tree.[ch]"),
+            GlobType::Full(Pattern::new("tree.[ch]").unwrap())
+        );
     }
 
     #[test]
