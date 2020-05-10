@@ -43,7 +43,7 @@ impl Icon {
         }
     }
 
-    pub fn from_string(s: String) -> Option<Icon> {
+    pub fn from_string(s: &str) -> Option<Icon> {
         let mut chunks = s.split(':');
 
         let mime_type = match chunks.next() {
@@ -86,7 +86,7 @@ pub fn read_icons_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Icon> {
             continue;
         }
 
-        match Icon::from_string(line) {
+        match Icon::from_string(&line) {
             Some(v) => res.push(v),
             None => continue,
         }
@@ -97,9 +97,9 @@ pub fn read_icons_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Icon> {
     res
 }
 
-pub fn find_icon(icons: &Vec<Icon>, mime_type: &String) -> Option<String> {
+pub fn find_icon(icons: &Vec<Icon>, mime_type: &str) -> Option<String> {
     for icon in icons {
-        if &icon.mime_type == mime_type {
+        if icon.mime_type == mime_type {
             return Some(icon.icon_name.clone());
         }
     }
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn from_str() {
         assert_eq!(
-            Icon::from_string("application/rss+xml:text-html".to_string()).unwrap(),
+            Icon::from_string("application/rss+xml:text-html").unwrap(),
             Icon::new("text-html", "application/rss+xml")
         );
     }

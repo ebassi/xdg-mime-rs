@@ -86,10 +86,10 @@ impl AliasesList {
         self.aliases.sort_unstable();
     }
 
-    pub fn unalias_mime_type(&self, mime_type: &String) -> Option<String> {
+    pub fn unalias_mime_type(&self, mime_type: &str) -> Option<String> {
         for a in self.aliases.iter() {
             if a.alias == *mime_type {
-                return Some(a.mime_type.clone());
+                return Some(a.mime_type.to_string());
             }
         }
 
