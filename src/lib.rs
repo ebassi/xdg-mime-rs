@@ -175,8 +175,8 @@ impl SharedMimeInfo {
             aliases: alias_list,
             parents: parents_map,
             globs: glob_map,
-            icons: icons,
-            generic_icons: generic_icons,
+            icons,
+            generic_icons,
             magic: magic_entries,
         }
     }
