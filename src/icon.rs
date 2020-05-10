@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Eq)]
 pub struct Icon {
@@ -95,6 +95,19 @@ pub fn read_icons_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Icon> {
     res.sort_unstable();
 
     res
+}
+
+pub fn read_icons_from_dir<P: AsRef<Path>>(dir: P, generic: bool) -> Vec<Icon> {
+    let mut icons_file = PathBuf::new();
+    icons_file.push(dir);
+
+    if generic {
+        icons_file.push("generic-icons");
+    } else {
+        icons_file.push("icons");
+    }
+
+    read_icons_from_file(icons_file)
 }
 
 pub fn find_icon(icons: &Vec<Icon>, mime_type: &str) -> Option<String> {
