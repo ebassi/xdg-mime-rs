@@ -4,7 +4,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Eq)]
 pub struct Subclass {
@@ -120,6 +120,14 @@ pub fn read_subclasses_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Subclass> 
     }
 
     res
+}
+
+pub fn read_subclasses_from_dir<P: AsRef<Path>>(dir: P) -> Vec<Subclass> {
+    let mut subclasses_file = PathBuf::new();
+    subclasses_file.push(dir);
+    subclasses_file.push("subclasses");
+
+    read_subclasses_from_file(subclasses_file)
 }
 
 #[cfg(test)]
