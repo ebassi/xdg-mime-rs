@@ -205,7 +205,7 @@ impl Glob {
         })
     }
 
-    fn compare(&self, file_name: &String) -> bool {
+    fn compare(&self, file_name: &str) -> bool {
         match &self.glob {
             GlobType::Literal(s) => {
                 let a = UniCase::new(s);
@@ -299,7 +299,7 @@ impl GlobMap {
         self.globs.extend(globs);
     }
 
-    pub fn lookup_mime_type_for_file_name(&self, file_name: &String) -> Option<Vec<String>> {
+    pub fn lookup_mime_type_for_file_name(&self, file_name: &str) -> Option<Vec<String>> {
         let mut matching_globs = Vec::new();
 
         for glob in &self.globs {

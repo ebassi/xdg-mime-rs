@@ -184,14 +184,14 @@ impl SharedMimeInfo {
     }
 
     /// Retrieves the MIME type aliased by @mime_type, if any.
-    pub fn unalias_mime_type(&self, mime_type: &String) -> Option<String> {
+    pub fn unalias_mime_type(&self, mime_type: &str) -> Option<String> {
         self.aliases.unalias_mime_type(mime_type)
     }
 
     /// Looks up the icons associated to a MIME type.
     ///
     /// The icons can be looked up within the current icon theme.
-    pub fn lookup_icon_names(&self, mime_type: &String) -> Vec<String> {
+    pub fn lookup_icon_names(&self, mime_type: &str) -> Vec<String> {
         let mut res = Vec::new();
 
         match icon::find_icon(&self.icons, &mime_type) {
@@ -199,7 +199,7 @@ impl SharedMimeInfo {
             None => {}
         };
 
-        res.push(mime_type.clone().replace("/", "-"));
+        res.push(mime_type.replace("/", "-"));
 
         match icon::find_icon(&self.generic_icons, mime_type) {
             Some(v) => res.push(v),
@@ -217,7 +217,7 @@ impl SharedMimeInfo {
     /// Looks up the generic icon associated to a MIME type.
     ///
     /// The icon can be looked up within the current icon theme.
-    pub fn lookup_generic_icon_name(&self, mime_type: &String) -> Option<String> {
+    pub fn lookup_generic_icon_name(&self, mime_type: &str) -> Option<String> {
         let res = match icon::find_icon(&self.generic_icons, mime_type) {
             Some(v) => v,
             None => {
@@ -231,7 +231,7 @@ impl SharedMimeInfo {
     }
 
     /// Looks up all the parent MIME types associated to @mime_type
-    pub fn get_parents(&self, mime_type: &String) -> Option<Vec<String>> {
+    pub fn get_parents(&self, mime_type: &str) -> Option<Vec<String>> {
         let unaliased = match self.aliases.unalias_mime_type(mime_type) {
             Some(v) => v,
             None => return None,
@@ -254,7 +254,7 @@ impl SharedMimeInfo {
 
     /// Retrieves the list of matching MIME types for the given file name,
     /// without looking at the data inside the file.
-    pub fn get_mime_types_from_file_name(&self, file_name: &String) -> Vec<String> {
+    pub fn get_mime_types_from_file_name(&self, file_name: &str) -> Vec<String> {
         let matching_types = match self.globs.lookup_mime_type_for_file_name(file_name) {
             Some(v) => v,
             None => {
@@ -306,11 +306,11 @@ mod tests {
         let mime_db = load_test_data();
 
         assert_eq!(
-            mime_db.lookup_generic_icon_name(&"application/json".to_string()),
+            mime_db.lookup_generic_icon_name("application/json"),
             Some("text-x-script".to_string())
         );
         assert_eq!(
-            mime_db.lookup_generic_icon_name(&"text/plain".to_string()),
+            mime_db.lookup_generic_icon_name("text/plain"),
             Some("text-x-generic".to_string())
         );
     }
@@ -320,10 +320,10 @@ mod tests {
         let mime_db = load_test_data();
 
         assert_eq!(
-            mime_db.unalias_mime_type(&"application/ics".to_string()),
+            mime_db.unalias_mime_type("application/ics"),
             Some("text/calendar".to_string())
         );
-        assert_eq!(mime_db.unalias_mime_type(&"text/plain".to_string()), None);
+        assert_eq!(mime_db.unalias_mime_type("text/plain"), None);
     }
 
     #[test]
@@ -331,12 +331,12 @@ mod tests {
         let mime_db = load_test_data();
 
         assert_eq!(
-            mime_db.get_mime_types_from_file_name(&"foo.txt".to_string()),
+            mime_db.get_mime_types_from_file_name("foo.txt"),
             vec!["text/plain".to_string()]
         );
 
         assert_eq!(
-            mime_db.get_mime_types_from_file_name(&"bar.gif".to_string()),
+            mime_db.get_mime_types_from_file_name("bar.gif"),
             vec!["image/gif".to_string()]
         );
     }
