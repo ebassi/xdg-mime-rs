@@ -3,12 +3,14 @@
 #![allow(dead_code)]
 
 /// SharedMimeInfo allows to look up the MIME type associated to a file name
-/// or to the contents of a file, using the [Cross-Desktop Group Shared MIME
+/// or to the contents of a file, using the [Freedesktop.org Shared MIME
 /// database specification][xdg-mime].
 ///
 /// Alongside the MIME type, the Shared MIME database contains other ancillary
 /// information, like the icon associated to the MIME type; the aliases for
 /// a given MIME type; and the various sub-classes of a MIME type.
+///
+/// [xdg-mime]: https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html
 use std::env;
 use std::path::{Path, PathBuf};
 
