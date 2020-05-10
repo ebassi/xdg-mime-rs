@@ -42,6 +42,12 @@ pub struct SharedMimeInfo {
     magic: Vec<magic::MagicEntry>,
 }
 
+impl Default for SharedMimeInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SharedMimeInfo {
     fn load_directory<P: AsRef<Path>>(&mut self, directory: P) {
         let mut mime_path = PathBuf::new();
