@@ -277,13 +277,9 @@ impl SharedMimeInfo {
 
     /// Checks whether two MIME types are equal, taking into account
     /// eventual aliases.
-    pub fn mime_type_equal(&self, mime_a: &String, mime_b: &String) -> bool {
-        let unaliased_a = self
-            .unalias_mime_type(mime_a)
-            .unwrap_or(mime_a.clone());
-        let unaliased_b = self
-            .unalias_mime_type(mime_b)
-            .unwrap_or(mime_b.clone());
+    pub fn mime_type_equal(&self, mime_a: &str, mime_b: &str) -> bool {
+        let unaliased_a = self.unalias_mime_type(mime_a).unwrap_or(mime_a.to_string());
+        let unaliased_b = self.unalias_mime_type(mime_b).unwrap_or(mime_b.to_string());
 
         return unaliased_a == unaliased_b;
     }
@@ -342,48 +338,27 @@ mod tests {
         let mime_db = load_test_data();
 
         assert_eq!(
-            mime_db.mime_type_equal(
-                &"application/wordperfect".to_string(),
-                &"application/vnd.wordperfect".to_string()
-            ),
+            mime_db.mime_type_equal("application/wordperfect", "application/vnd.wordperfect"),
             true
         );
         assert_eq!(
-            mime_db.mime_type_equal(
-                &"application/x-gnome-app-info".to_string(),
-                &"application/x-desktop".to_string()
-            ),
+            mime_db.mime_type_equal("application/x-gnome-app-info", "application/x-desktop"),
             true
         );
         assert_eq!(
-            mime_db.mime_type_equal(
-                &"application/x-wordperfect".to_string(),
-                &"application/vnd.wordperfect".to_string()
-            ),
+            mime_db.mime_type_equal("application/x-wordperfect", "application/vnd.wordperfect"),
             true
         );
         assert_eq!(
-            mime_db.mime_type_equal(
-                &"application/x-wordperfect".to_string(),
-                &"audio/x-midi".to_string()
-            ),
+            mime_db.mime_type_equal("application/x-wordperfect", "audio/x-midi"),
             false
         );
+        assert_eq!(mime_db.mime_type_equal("/", "vnd/vnd"), false);
         assert_eq!(
-            mime_db.mime_type_equal(&"/".to_string(), &"vnd/vnd".to_string()),
+            mime_db.mime_type_equal("application/octet-stream", "text/plain"),
             false
         );
-        assert_eq!(
-            mime_db.mime_type_equal(
-                &"application/octet-stream".to_string(),
-                &"text/plain".to_string()
-            ),
-            false
-        );
-        assert_eq!(
-            mime_db.mime_type_equal(&"text/plain".to_string(), &"text/*".to_string()),
-            false
-        );
+        assert_eq!(mime_db.mime_type_equal("text/plain", "text/*"), false);
     }
 
     #[test]
