@@ -65,8 +65,8 @@ impl Icon {
         }
 
         Some(Icon {
-            icon_name: icon_name,
-            mime_type: mime_type,
+            icon_name,
+            mime_type,
         })
     }
 }
