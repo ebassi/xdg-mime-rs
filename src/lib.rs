@@ -9,8 +9,10 @@
 /// Alongside the MIME type, the Shared MIME database contains other ancillary
 /// information, like the icon associated to the MIME type; the aliases for
 /// a given MIME type; and the various sub-classes of a MIME type.
+use std::env;
 use std::path::{Path, PathBuf};
 
+extern crate dirs;
 #[macro_use] extern crate nom;
 
 mod alias;
@@ -38,17 +40,6 @@ pub struct SharedMimeInfo {
 }
 
 impl SharedMimeInfo {
-    fn new() -> SharedMimeInfo {
-        SharedMimeInfo {
-            aliases: alias::AliasesList::new(),
-            parents: parent::ParentsMap::new(),
-            icons: Vec::new(),
-            generic_icons: Vec::new(),
-            globs: glob::GlobMap::new(),
-            magic: Vec::new(),
-        }
-    }
-
     fn load_directory<P: AsRef<Path>>(&mut self, directory: P) {
         let mut mime_path = PathBuf::new();
         mime_path.push(directory);
@@ -94,10 +85,49 @@ impl SharedMimeInfo {
         self.magic.extend(magic_entries);
     }
 
+    fn create() -> SharedMimeInfo {
+        SharedMimeInfo {
+            aliases: alias::AliasesList::new(),
+            parents: parent::ParentsMap::new(),
+            icons: Vec::new(),
+            generic_icons: Vec::new(),
+            globs: glob::GlobMap::new(),
+            magic: Vec::new(),
+        }
+    }
+
+    /// Creates a new SharedMimeInfo database containing all MIME information
+    /// under the [XDG base directories][xdg-base-dir].
+    ///
+    /// [xdg-base-dir]: http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
+    pub fn new() -> SharedMimeInfo {
+        let mut db = SharedMimeInfo::create();
+
+        let data_home = dirs::data_dir().expect("Data directory is unset");
+        db.load_directory(data_home);
+
+        let data_dirs = match env::var_os("XDG_DATA_DIRS") {
+            Some(v) => {
+                env::split_paths(&v).collect()
+            }
+            None => {
+                vec![PathBuf::from("/usr/local/share"),
+                     PathBuf::from("/usr/share")]
+            }
+        };
+
+        for dir in data_dirs {
+            db.load_directory(dir)
+        }
+
+        db
+    }
+
+
     /// Load all the MIME information under @directory, and create a new
     /// SharedMimeInfo for it. This method is only really useful for
     /// testing purposes.
-    pub fn from_directory<P: AsRef<Path>>(directory: P) -> SharedMimeInfo {
+    pub fn new_for_directory<P: AsRef<Path>>(directory: P) -> SharedMimeInfo {
         let mut mime_path = PathBuf::new();
         mime_path.push(directory);
         mime_path.push("mime");
@@ -235,6 +265,7 @@ impl SharedMimeInfo {
         matching_types
     }
 
+    /// Retrieves the MIME type for the given data.
     pub fn get_mime_type_for_data(&self, data: &[u8]) -> Option<String> {
         let mime_type = match magic::lookup_data(&self.magic, data) {
             Some(v) => v.0,
@@ -253,14 +284,19 @@ mod tests {
     fn load_test_data() -> SharedMimeInfo {
         let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
         let dir = PathBuf::from(&format!("{}/test_files", cwd));
-        SharedMimeInfo::from_directory(dir)
+        SharedMimeInfo::new_for_directory(dir)
     }
 
     #[test]
     fn load_from_directory() {
         let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
         let dir = PathBuf::from(&format!("{}/test_files", cwd));
-        SharedMimeInfo::from_directory(dir);
+        SharedMimeInfo::new_for_directory(dir);
+    }
+
+    #[test]
+    fn load_system() {
+        SharedMimeInfo::new();
     }
 
     #[test]
