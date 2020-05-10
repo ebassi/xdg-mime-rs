@@ -79,7 +79,7 @@ impl ParentsMap {
         let v = self
             .parents
             .entry(subclass.mime_type.clone())
-            .or_insert(Vec::new());
+            .or_insert_with(Vec::new);
         if !v.contains(&subclass.parent_type) {
             v.push(subclass.parent_type.clone());
         }
