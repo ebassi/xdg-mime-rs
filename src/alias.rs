@@ -13,7 +13,7 @@ pub struct Alias {
 
 impl fmt::Debug for Alias {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Alias {} {}\n", self.alias, self.mime_type)
+        writeln!(f, "Alias {} {}", self.alias, self.mime_type)
     }
 }
 
