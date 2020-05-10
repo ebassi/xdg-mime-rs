@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str;
 use std::vec::Vec;
 
@@ -283,6 +283,16 @@ named!(from_u8_to_entries<Vec<MagicEntry>>,
     )
 );
 
+pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(String, u32)> {
+    for entry in entries {
+        if let Some(v) = entry.matches(data) {
+            return Some((v.0.clone(), v.1))
+        }
+    }
+
+    None
+}
+
 pub fn read_magic_from_file<P: AsRef<Path>>(file_name: P) -> Vec<MagicEntry> {
     let mut f = match File::open(file_name) {
         Ok(v) => v,
@@ -294,19 +304,16 @@ pub fn read_magic_from_file<P: AsRef<Path>>(file_name: P) -> Vec<MagicEntry> {
     f.read_to_end(&mut magic_buf).unwrap();
     match from_u8_to_entries(magic_buf.as_slice()) {
         Ok(v) => v.1,
-        Err(_) => return Vec::new(),
+        Err(_) => Vec::new(),
     }
 }
 
-pub fn lookup_data(entries: &Vec<MagicEntry>, data: &[u8]) -> Option<(String, u32)> {
-    for entry in entries {
-        match entry.matches(data) {
-            Some(v) => return Some((v.0.clone(), v.1)),
-            None => {},
-        };
-    }
+pub fn read_magic_from_dir<P: AsRef<Path>>(dir: P) -> Vec<MagicEntry> {
+    let mut magic_file = PathBuf::new();
+    magic_file.push(dir);
+    magic_file.push("magic");
 
-    None
+    read_magic_from_file(magic_file)
 }
 
 #[cfg(test)]
