@@ -279,7 +279,7 @@ impl SharedMimeInfo {
         let unaliased_a = self.unalias_mime_type(mime_a).unwrap_or(mime_a.to_string());
         let unaliased_b = self.unalias_mime_type(mime_b).unwrap_or(mime_b.to_string());
 
-        return unaliased_a == unaliased_b;
+        unaliased_a == unaliased_b
     }
 }
 
