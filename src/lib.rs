@@ -274,6 +274,19 @@ impl SharedMimeInfo {
 
         Some(mime_type)
     }
+
+    /// Checks whether two MIME types are equal, taking into account
+    /// eventual aliases.
+    pub fn mime_type_equal(&self, mime_a: &String, mime_b: &String) -> bool {
+        let unaliased_a = self
+            .unalias_mime_type(mime_a)
+            .unwrap_or(mime_a.clone());
+        let unaliased_b = self
+            .unalias_mime_type(mime_b)
+            .unwrap_or(mime_b.clone());
+
+        return unaliased_a == unaliased_b;
+    }
 }
 
 #[cfg(test)]
@@ -322,6 +335,55 @@ mod tests {
             Some("text/calendar".to_string())
         );
         assert_eq!(mime_db.unalias_mime_type("text/plain"), None);
+    }
+
+    #[test]
+    fn mime_type_equal() {
+        let mime_db = load_test_data();
+
+        assert_eq!(
+            mime_db.mime_type_equal(
+                &"application/wordperfect".to_string(),
+                &"application/vnd.wordperfect".to_string()
+            ),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_equal(
+                &"application/x-gnome-app-info".to_string(),
+                &"application/x-desktop".to_string()
+            ),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_equal(
+                &"application/x-wordperfect".to_string(),
+                &"application/vnd.wordperfect".to_string()
+            ),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_equal(
+                &"application/x-wordperfect".to_string(),
+                &"audio/x-midi".to_string()
+            ),
+            false
+        );
+        assert_eq!(
+            mime_db.mime_type_equal(&"/".to_string(), &"vnd/vnd".to_string()),
+            false
+        );
+        assert_eq!(
+            mime_db.mime_type_equal(
+                &"application/octet-stream".to_string(),
+                &"text/plain".to_string()
+            ),
+            false
+        );
+        assert_eq!(
+            mime_db.mime_type_equal(&"text/plain".to_string(), &"text/*".to_string()),
+            false
+        );
     }
 
     #[test]
