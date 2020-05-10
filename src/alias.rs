@@ -57,8 +57,8 @@ impl Alias {
         };
 
         Some(Alias {
-            alias: alias,
-            mime_type: mime_type,
+            alias,
+            mime_type,
         })
     }
 }
