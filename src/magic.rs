@@ -292,12 +292,10 @@ pub fn read_magic_from_file<P: AsRef<Path>>(file_name: P) -> Vec<MagicEntry> {
     let mut magic_buf = Vec::<u8>::new();
 
     f.read_to_end(&mut magic_buf).unwrap();
-    let entries = match from_u8_to_entries(magic_buf.as_slice()) {
+    match from_u8_to_entries(magic_buf.as_slice()) {
         Ok(v) => v.1,
         Err(_) => return Vec::new(),
-    };
-
-    entries
+    }
 }
 
 pub fn lookup_data(entries: &Vec<MagicEntry>, data: &[u8]) -> Option<(String, u32)> {
