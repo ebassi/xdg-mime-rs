@@ -308,7 +308,7 @@ impl GlobMap {
             }
         }
 
-        if matching_globs.len() == 0 {
+        if matching_globs.is_empty() {
             return None;
         }
 
