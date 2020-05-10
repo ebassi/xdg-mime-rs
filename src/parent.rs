@@ -42,7 +42,7 @@ impl Subclass {
 
 impl fmt::Debug for Subclass {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Subclass {} {}\n", self.parent_type, self.mime_type)
+        writeln!(f, "Subclass {} {}", self.parent_type, self.mime_type)
     }
 }
 
