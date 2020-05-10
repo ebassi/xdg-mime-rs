@@ -81,7 +81,7 @@ impl ParentsMap {
             .entry(subclass.mime_type.clone())
             .or_insert_with(Vec::new);
         if !v.contains(&subclass.parent_type) {
-            v.push(subclass.parent_type.clone());
+            v.push(subclass.parent_type);
         }
     }
 
