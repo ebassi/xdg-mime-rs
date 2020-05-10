@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use glob::Pattern;
 use unicase::UniCase;
@@ -280,6 +280,22 @@ pub fn read_globs_v2_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     }
 
     Some(res)
+}
+
+pub fn read_globs_from_dir<P: AsRef<Path>>(dir: P) -> Vec<Glob> {
+    let mut globs_file = PathBuf::new();
+    globs_file.push(dir);
+    globs_file.push("globs2");
+
+    match read_globs_v2_from_file(&globs_file) {
+        Some(v) => v,
+        None => {
+            globs_file.pop();
+            globs_file.push("globs");
+
+            read_globs_v1_from_file(globs_file).unwrap_or_default()
+        }
+    }
 }
 
 pub struct GlobMap {
