@@ -13,7 +13,7 @@ pub struct Icon {
 
 impl fmt::Debug for Icon {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Icon for {}: {}\n", self.mime_type, self.icon_name)
+        writeln!(f, "Icon for {}: {}", self.mime_type, self.icon_name)
     }
 }
 
