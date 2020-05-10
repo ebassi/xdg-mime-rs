@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Eq)]
 pub struct Alias {
@@ -120,6 +120,14 @@ pub fn read_aliases_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Alias> {
     }
 
     res
+}
+
+pub fn read_aliases_from_dir<P: AsRef<Path>>(dir: P) -> Vec<Alias> {
+    let mut alias_file = PathBuf::new();
+    alias_file.push(dir);
+    alias_file.push("aliases");
+
+    read_aliases_from_file(alias_file)
 }
 
 #[cfg(test)]
