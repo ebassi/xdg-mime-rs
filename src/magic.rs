@@ -142,13 +142,13 @@ named!(
         _value_length: be_u16 >>
         _value: do_parse!(
             res: take!(_value_length) >>
-            (res.iter().map(|&x| x).collect())
+            (res.iter().copied().collect())
         ) >>
         _mask: opt!(
             do_parse!(
                 char!('&') >>
                 res: take!(_value_length) >>
-                (res.iter().map(|&x| x).collect())
+                (res.iter().copied().collect())
 	    )
         ) >>
         _word_size: word_size >>
