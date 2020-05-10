@@ -199,7 +199,7 @@ impl MagicEntry {
     fn matches(&self, data: &[u8]) -> Option<(&String, u32)> {
         let mut current_level = 0;
 
-        let mut iter = (&self.rules).into_iter().peekable();
+        let mut iter = (&self.rules).iter().peekable();
         while let Some(rule) = iter.next() {
             // The rules are a flat list that represent a tree; the "indent"
             // is the depth of the rule in the tree. If a rule matches at a
