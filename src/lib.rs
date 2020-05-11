@@ -240,6 +240,55 @@ impl SharedMimeInfo {
 
         unaliased_a == unaliased_b
     }
+
+    /// Checks whether a MIME type is a subclass of another MIME type
+    pub fn mime_type_subclass(&self, mime_type: &str, base: &str) -> bool {
+        let unaliased_mime = self
+            .unalias_mime_type(mime_type)
+            .unwrap_or_else(|| mime_type.to_string());
+        let unaliased_base = self
+            .unalias_mime_type(base)
+            .unwrap_or_else(|| base.to_string());
+
+        if unaliased_mime == unaliased_base {
+            return true;
+        }
+
+        // Handle super-types
+        if unaliased_base.ends_with("/*") {
+            let chunks = unaliased_base.split('/').collect::<Vec<&str>>();
+
+            if unaliased_mime.starts_with(chunks.get(0).unwrap()) {
+                return true;
+            }
+        }
+
+        // The text/plain and application/octet-stream require some
+        // special handling:
+        //
+        //  - All text/* types are subclasses of text/plain.
+        //  - All streamable types (ie, everything except the
+        //    inode/* types) are subclasses of application/octet-stream
+        //
+        // https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#subclassing
+        if unaliased_base == "text/plain" && unaliased_mime.starts_with("text/") {
+            return true;
+        }
+
+        if unaliased_base == "application/octet-stream" && !unaliased_mime.starts_with("inode/") {
+            return true;
+        }
+
+        if let Some(parents) = self.parents.lookup(&unaliased_mime) {
+            for parent in parents {
+                if self.mime_type_subclass(parent, &unaliased_base) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
 }
 
 #[cfg(test)]
@@ -348,5 +397,53 @@ mod tests {
             mime_db.get_mime_type_for_data(png_data),
             Some(("image/png".to_string(), 50))
         );
+    }
+
+    #[test]
+    fn mime_type_subclass() {
+        let mime_db = load_test_data();
+
+        assert_eq!(
+            mime_db.mime_type_subclass("application/rtf", "text/plain"),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass("message/news", "text/plain"),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass("message/news", "message/*"),
+            true
+        );
+        assert_eq!(mime_db.mime_type_subclass("message/news", "text/*"), true);
+        assert_eq!(
+            mime_db.mime_type_subclass("message/news", "application/octet-stream"),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass("application/rtf", "application/octet-stream"),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass("application/x-gnome-app-info", "text/plain"),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass("image/x-djvu", "image/vnd.djvu"),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass("image/vnd.djvu", "image/x-djvu"),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass("image/vnd.djvu", "text/plain"),
+            false
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass("image/vnd.djvu", "text/*"),
+            false
+        );
+        assert_eq!(mime_db.mime_type_subclass("text/*", "text/plain"), true);
     }
 }
