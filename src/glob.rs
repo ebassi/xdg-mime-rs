@@ -183,7 +183,7 @@ pub fn read_globs_v1_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
-        if let Err(_) = line {
+        if line.is_err() {
             return None;
         }
 
@@ -211,7 +211,7 @@ pub fn read_globs_v2_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
-        if let Err(_) = line {
+        if line.is_err() {
             return None;
         }
 
