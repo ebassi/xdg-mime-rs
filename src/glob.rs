@@ -117,57 +117,28 @@ impl Glob {
     }
 
     pub fn from_v2_string(s: &str) -> Option<Glob> {
-        if s.is_empty() || !s.contains(':') {
-            return None;
-        }
+        let mut chunks = s.split(':').fuse();
 
-        let mut chunks = s.split(':');
+        let weight = chunks.next()
+            .and_then(|v| v.parse::<i32>().ok())
+            .filter(|n| *n >= 0)?;
 
-        let weight = match chunks.next() {
-            Some(v) => v.parse::<i32>().unwrap_or(-1),
-            None => return None,
-        };
-
-        if weight < 0 {
-            return None;
-        }
-
-        let mime_type = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        let glob = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        if mime_type.is_empty() || glob.is_empty() {
-            return None;
-        }
+        let mime_type = chunks.next()?;
+        let glob = chunks.next()?;
 
         let case_sensitive = match chunks.next() {
-            Some(v) => {
-                if v == "cs" {
-                    true
-                } else {
-                    return None;
-                }
-            }
+            Some("cs") => true,
             None => false,
+
+            Some(_) => return None,
         };
 
         // Consume the leftovers, if any
-        if chunks.count() != 0 {
+        if chunks.next().is_some() {
             return None;
         }
 
-        Some(Glob {
-            glob: determine_type(&glob),
-            weight,
-            case_sensitive,
-            mime_type,
-        })
+        Some(Glob::new(mime_type, glob, weight, case_sensitive))
     }
 
     fn compare(&self, file_name: &str) -> bool {
