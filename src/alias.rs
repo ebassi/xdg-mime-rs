@@ -87,13 +87,10 @@ impl AliasesList {
     }
 
     pub fn unalias_mime_type(&self, mime_type: &str) -> Option<String> {
-        for a in self.aliases.iter() {
-            if a.alias == *mime_type {
-                return Some(a.mime_type.to_string());
-            }
-        }
-
-        None
+        self.aliases
+            .iter()
+            .find(|a| a.alias == mime_type)
+            .map(|a| a.mime_type.to_string())
     }
 }
 
