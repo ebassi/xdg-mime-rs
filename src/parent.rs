@@ -20,7 +20,7 @@ impl Subclass {
         }
     }
 
-    fn from_string(s: String) -> Option<Subclass> {
+    fn from_string(s: &str) -> Option<Subclass> {
         let mut chunks = s.split_whitespace().fuse();
         let mime_type = chunks.next()?;
         let parent_type = chunks.next()?;
@@ -100,7 +100,7 @@ pub fn read_subclasses_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Subclass> 
             continue;
         }
 
-        match Subclass::from_string(line) {
+        match Subclass::from_string(&line) {
             Some(v) => res.push(v),
             None => continue,
         }
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn from_str() {
         assert_eq!(
-            Subclass::from_string("message/partial text/plain".to_string()).unwrap(),
+            Subclass::from_string("message/partial text/plain").unwrap(),
             Subclass::new("message/partial", "text/plain")
         );
     }
