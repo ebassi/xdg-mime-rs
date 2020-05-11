@@ -229,6 +229,10 @@ pub fn read_globs_v1_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
+        if let Err(_) = line {
+            return None;
+        }
+
         let line = line.unwrap();
 
         if line.is_empty() || line.starts_with('#') {
@@ -253,6 +257,10 @@ pub fn read_globs_v2_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
+        if let Err(_) = line {
+            return None;
+        }
+
         let line = line.unwrap();
 
         if line.is_empty() || line.starts_with('#') {
