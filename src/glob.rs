@@ -128,12 +128,15 @@ impl Glob {
         let mime_type = chunks.next()?;
         let glob = chunks.next()?;
 
-        let case_sensitive = match chunks.next() {
-            Some("cs") => true,
-            None => false,
+        let mut case_sensitive = false;
+        if let Some(flags) = chunks.next() {
+            let flags_chunks = flags.split(',').collect::<Vec<&str>>();
 
-            Some(_) => return None,
-        };
+            // Allow for extra flags
+            if flags_chunks.iter().position(|&f| f == "cs").is_some() {
+                case_sensitive = true;
+            }
+        }
 
         // Ignore any other token, for extensibility:
         //
@@ -371,7 +374,7 @@ mod tests {
         assert_eq!(Glob::from_v2_string("foo:bar:baz:blah"), None);
 
         assert_eq!(
-            Glob::from_v2_string("50:text/x-c++src:*.C:cs:newflag:newfeature:somethingelse"),
+            Glob::from_v2_string("50:text/x-c++src:*.C:cs,newflag:newfeature:somethingelse"),
             Some(Glob::new("text/x-c++src", "*.C", 50, true))
         );
     }
