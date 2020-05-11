@@ -133,7 +133,7 @@ impl Glob {
             let flags_chunks = flags.split(',').collect::<Vec<&str>>();
 
             // Allow for extra flags
-            if flags_chunks.iter().position(|&f| f == "cs").is_some() {
+            if flags_chunks.iter().any(|&f| f == "cs") {
                 case_sensitive = true;
             }
         }
