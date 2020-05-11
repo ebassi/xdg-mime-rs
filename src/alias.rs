@@ -36,10 +36,10 @@ impl PartialOrd for Alias {
 }
 
 impl Alias {
-    pub fn new<S: Into<String>>(alias: S, mime_type: S) -> Alias {
+    pub fn new(alias: &str, mime_type: &str) -> Alias {
         Alias {
-            alias: alias.into(),
-            mime_type: mime_type.into(),
+            alias: alias.to_string(),
+            mime_type: mime_type.to_string(),
         }
     }
 
