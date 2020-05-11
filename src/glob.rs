@@ -27,9 +27,8 @@ impl fmt::Debug for GlobType {
     }
 }
 
-fn determine_type<S: Into<String>>(glob: S) -> GlobType {
+fn determine_type(glob: &str) -> GlobType {
     let mut maybe_simple = false;
-    let glob = glob.into();
 
     for (idx, ch) in glob.bytes().enumerate() {
         if idx == 0 && ch == b'*' {
@@ -42,7 +41,7 @@ fn determine_type<S: Into<String>>(glob: S) -> GlobType {
     if maybe_simple {
         GlobType::Simple(glob[1..].to_string())
     } else {
-        GlobType::Literal(glob)
+        GlobType::Literal(glob.to_string())
     }
 }
 
@@ -77,9 +76,8 @@ impl PartialOrd for Glob {
 }
 
 impl Glob {
-    pub fn simple<S: Into<String>>(mime_type: S, glob: S) -> Glob {
+    pub fn simple<S: Into<String>>(mime_type: S, glob: &str) -> Glob {
         let mime_type = mime_type.into();
-        let glob = glob.into();
 
         Glob {
             mime_type,
@@ -89,9 +87,8 @@ impl Glob {
         }
     }
 
-    pub fn with_weight<S: Into<String>>(mime_type: S, glob: S, weight: i32) -> Glob {
+    pub fn with_weight<S: Into<String>>(mime_type: S, glob: &str, weight: i32) -> Glob {
         let mime_type = mime_type.into();
-        let glob = glob.into();
 
         Glob {
             mime_type,
@@ -101,9 +98,8 @@ impl Glob {
         }
     }
 
-    pub fn new<S: Into<String>>(mime_type: S, glob: S, weight: i32, cs: bool) -> Glob {
+    pub fn new<S: Into<String>>(mime_type: S, glob: &str, weight: i32, cs: bool) -> Glob {
         let mime_type = mime_type.into();
-        let glob = glob.into();
 
         Glob {
             mime_type,
@@ -142,7 +138,7 @@ impl Glob {
         }
 
         Some(Glob {
-            glob: determine_type(glob),
+            glob: determine_type(&glob),
             mime_type,
             weight: 50,
             case_sensitive: false,
@@ -198,7 +194,7 @@ impl Glob {
         }
 
         Some(Glob {
-            glob: determine_type(glob),
+            glob: determine_type(&glob),
             weight,
             case_sensitive,
             mime_type,
