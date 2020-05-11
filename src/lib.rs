@@ -14,6 +14,9 @@
 /// [xdg-mime]: https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html
 use std::env;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use mime::Mime;
 
 extern crate dirs;
 #[macro_use]
@@ -177,9 +180,12 @@ impl SharedMimeInfo {
         let mut res = Vec::new();
         res.push(unaliased.clone());
 
+        // FIXME: convert aliases module to Mime
+        let unaliased = Mime::from_str(&unaliased).ok()?;
+
         if let Some(parents) = self.parents.lookup(&unaliased) {
             for parent in parents {
-                res.push(parent.clone());
+                res.push(parent.essence_str().to_string());
             }
         };
 
@@ -256,9 +262,12 @@ impl SharedMimeInfo {
             return true;
         }
 
+        // FIXME: convert to Mime
+        let unaliased_mime = Mime::from_str(&unaliased_mime).unwrap();
+
         if let Some(parents) = self.parents.lookup(&unaliased_mime) {
             for parent in parents {
-                if self.mime_type_subclass(parent, &unaliased_base) {
+                if self.mime_type_subclass(parent.essence_str(), &unaliased_base) {
                     return true;
                 }
             }
