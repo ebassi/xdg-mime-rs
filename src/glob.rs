@@ -104,37 +104,16 @@ impl Glob {
     }
 
     pub fn from_v1_string(s: &str) -> Option<Glob> {
-        if s.is_empty() || !s.contains(':') {
-            return None;
-        }
-
-        let mut chunks = s.split(':');
-
-        let mime_type = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        let glob = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        if mime_type.is_empty() || glob.is_empty() {
-            return None;
-        }
+        let mut chunks = s.split(':').fuse();
+        let mime_type = chunks.next().filter(|s| !s.is_empty())?;
+        let glob = chunks.next().filter(|s| !s.is_empty())?;
 
         // Consume the leftovers, if any
-        if chunks.count() != 0 {
+        if chunks.next().is_some() {
             return None;
         }
 
-        Some(Glob {
-            glob: determine_type(&glob),
-            mime_type,
-            weight: 50,
-            case_sensitive: false,
-        })
+        Some(Glob::new(mime_type, glob, 50, false))
     }
 
     pub fn from_v2_string(s: &str) -> Option<Glob> {
