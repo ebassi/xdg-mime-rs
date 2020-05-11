@@ -83,8 +83,8 @@ impl MagicRule {
 named!(
     indent_level<u32>,
     do_parse!(
-        res: take_until!(">") >>
-        (buf_to_u32(res, 0))
+        res: take_until!(">")
+    >>  (buf_to_u32(res, 0))
     )
 );
 
@@ -92,8 +92,8 @@ named!(
 named!(
     start_offset<u32>,
     do_parse!(
-        res: take_until!("=") >>
-        (buf_to_u32(res, 0))
+        res: take_until!("=")
+    >>  (buf_to_u32(res, 0))
     )
 );
 
@@ -103,14 +103,11 @@ named!(
     word_size<Option<u32>>,
     opt!(
         do_parse!(
-            tag!("~") >>
-            res: alt!(
-                tag!("0") |
-                tag!("1") |
-                tag!("2") |
-                tag!("4")
-            ) >>
-            (buf_to_u32(res, 1))
+            tag!("~")
+        >>  res: alt!(
+                tag!("0") | tag!("1") | tag!("2") | tag!("4")
+            )
+        >>  (buf_to_u32(res, 1))
 	)
     )
 );
@@ -120,9 +117,9 @@ named!(
     range_length<Option<u32>>,
     opt!(
         do_parse!(
-            tag!("+") >>
-            res: take_while!(is_hex_digit) >>
-            (buf_to_u32(res, 1))
+            tag!("+")
+        >>  res: take_while!(is_hex_digit)
+        >>  (buf_to_u32(res, 1))
 	)
     )
 );
@@ -134,27 +131,27 @@ named!(
 named!(
     magic_rule<MagicRule>,
     do_parse!(
-        peek!(is_a!("012345689>")) >>
-        _indent: indent_level >>
-        tag!(">") >>
-        _start_offset: start_offset >>
-        tag!("=") >>
-        _value_length: be_u16 >>
-        _value: do_parse!(
-            res: take!(_value_length) >>
-            (res.iter().copied().collect())
-        ) >>
-        _mask: opt!(
+        peek!(is_a!("0123456789>"))
+    >>  _indent: indent_level
+    >>  tag!(">")
+    >>  _start_offset: start_offset
+    >>  tag!("=")
+    >>  _value_length: be_u16
+    >>  _value: do_parse!(
+            res: take!(_value_length)
+        >>  (res.iter().copied().collect())
+        )
+    >>  _mask: opt!(
             do_parse!(
-                char!('&') >>
-                res: take!(_value_length) >>
-                (res.iter().copied().collect())
+                char!('&')
+            >>  res: take!(_value_length)
+            >>  (res.iter().copied().collect())
 	    )
-        ) >>
-        _word_size: word_size >>
-        _range_length: range_length >>
-        line_ending >>
-        (MagicRule {
+        )
+    >>  _word_size: word_size
+    >>  _range_length: range_length
+    >>  line_ending
+    >>  (MagicRule {
             indent: _indent,
             start_offset: _start_offset,
             value_length: _value_length,
@@ -235,8 +232,8 @@ impl MagicEntry {
 
 named!(priority<u32>,
     do_parse!(
-        res: take_until!(":") >>
-        (buf_to_u32(res, 0))
+        res: take_until!(":")
+    >>  (buf_to_u32(res, 0))
     )
 );
 
@@ -251,23 +248,23 @@ named!(mime_type<&str>,
 // '[' <priority> ':' <mime_type> ']' '\n'
 named!(magic_header<(u32, &str)>,
     do_parse!(
-        tag!("[") >>
-        _priority: priority >>
-        tag!(":") >>
-        _mime_type: mime_type >>
-        tag!("]\n") >>
-        (_priority, _mime_type)
+        tag!("[")
+    >>  _priority: priority
+    >>  tag!(":")
+    >>  _mime_type: mime_type
+    >>  tag!("]\n")
+    >>  (_priority, _mime_type)
     )
 );
 
 // magic_entry =
 // <magic_header>
-// <magic_entry>+
+// <magic_rule>+
 named!(magic_entry<MagicEntry>,
     do_parse!(
-        _header: magic_header >>
-        _rules: many1!(complete!(magic_rule)) >>
-        (MagicEntry {
+        _header: magic_header
+    >>  _rules: many1!(complete!(magic_rule))
+    >>  (MagicEntry {
             priority: _header.0,
             mime_type: _header.1.into(),
             rules: _rules,
@@ -277,9 +274,9 @@ named!(magic_entry<MagicEntry>,
 
 named!(from_u8_to_entries<Vec<MagicEntry>>,
     do_parse!(
-	tag!("MIME-Magic\0\n") >>
-	res: many0!(complete!(magic_entry)) >>
-	(res)
+	tag!("MIME-Magic\0\n")
+    >>  res: many0!(complete!(magic_entry))
+    >>  (res)
     )
 );
 
