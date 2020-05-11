@@ -44,22 +44,11 @@ impl Alias {
     }
 
     pub fn from_string(s: String) -> Option<Alias> {
-        let mut chunks = s.split_whitespace();
+        let mut chunks = s.split_whitespace().fuse();
+        let alias = chunks.next()?;
+        let mime_type = chunks.next()?;
 
-        let alias = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        let mime_type = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        Some(Alias {
-            alias,
-            mime_type,
-        })
+        Some(Alias::new(alias, mime_type))
     }
 }
 
