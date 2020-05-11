@@ -19,6 +19,7 @@ doctest = false
 [dependencies]
 dirs = "2.0"
 glob = "0.3.0"
+mime = "0.3"
 nom = "^5"
 unicase = "2.3.0"
 
