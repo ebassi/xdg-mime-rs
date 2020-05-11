@@ -21,22 +21,11 @@ impl Subclass {
     }
 
     fn from_string(s: String) -> Option<Subclass> {
-        let mut chunks = s.split_whitespace();
+        let mut chunks = s.split_whitespace().fuse();
+        let mime_type = chunks.next()?;
+        let parent_type = chunks.next()?;
 
-        let mime_type = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        let parent_type = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        Some(Subclass {
-            mime_type,
-            parent_type,
-        })
+        Some(Subclass::new(mime_type, parent_type))
     }
 }
 
