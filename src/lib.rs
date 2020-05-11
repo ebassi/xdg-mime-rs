@@ -79,7 +79,7 @@ impl SharedMimeInfo {
         self.parents.add_subclasses(subclasses);
 
         let globs = glob::read_globs_from_dir(&mime_path);
-        self.globs.add_globs(globs);
+        self.globs.add_globs(&globs);
 
         let magic_entries = magic::read_magic_from_dir(&mime_path);
         self.magic.extend(magic_entries);

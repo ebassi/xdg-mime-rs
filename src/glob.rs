@@ -297,8 +297,8 @@ impl GlobMap {
         self.globs.push(glob);
     }
 
-    pub fn add_globs(&mut self, globs: Vec<Glob>) {
-        self.globs.extend(globs);
+    pub fn add_globs(&mut self, globs: &[Glob]) {
+        self.globs.extend_from_slice(globs);
     }
 
     pub fn lookup_mime_type_for_file_name(&self, file_name: &str) -> Option<Vec<String>> {
