@@ -76,33 +76,27 @@ impl PartialOrd for Glob {
 }
 
 impl Glob {
-    pub fn simple<S: Into<String>>(mime_type: S, glob: &str) -> Glob {
-        let mime_type = mime_type.into();
-
+    pub fn simple(mime_type: &str, glob: &str) -> Glob {
         Glob {
-            mime_type,
+            mime_type: mime_type.to_string(),
             glob: determine_type(glob),
             weight: 50,
             case_sensitive: false,
         }
     }
 
-    pub fn with_weight<S: Into<String>>(mime_type: S, glob: &str, weight: i32) -> Glob {
-        let mime_type = mime_type.into();
-
+    pub fn with_weight(mime_type: &str, glob: &str, weight: i32) -> Glob {
         Glob {
-            mime_type,
+            mime_type: mime_type.to_string(),
             glob: determine_type(glob),
             weight,
             case_sensitive: false,
         }
     }
 
-    pub fn new<S: Into<String>>(mime_type: S, glob: &str, weight: i32, cs: bool) -> Glob {
-        let mime_type = mime_type.into();
-
+    pub fn new(mime_type: &str, glob: &str, weight: i32, cs: bool) -> Glob {
         Glob {
-            mime_type,
+            mime_type: mime_type.to_string(),
             glob: determine_type(glob),
             weight,
             case_sensitive: cs,
