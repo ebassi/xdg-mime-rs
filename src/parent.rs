@@ -20,23 +20,17 @@ impl Subclass {
         }
     }
 
-    fn from_string(s: String) -> Option<Subclass> {
-        let mut chunks = s.split_whitespace();
+    fn from_string(s: &str) -> Option<Subclass> {
+        let mut chunks = s.split_whitespace().fuse();
+        let mime_type = chunks.next()?;
+        let parent_type = chunks.next()?;
 
-        let mime_type = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
+        // Consume the leftovers, if any
+        if chunks.next().is_some() {
+            return None;
+        }
 
-        let parent_type = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        Some(Subclass {
-            mime_type,
-            parent_type,
-        })
+        Some(Subclass::new(mime_type, parent_type))
     }
 }
 
@@ -111,7 +105,7 @@ pub fn read_subclasses_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Subclass> 
             continue;
         }
 
-        match Subclass::from_string(line) {
+        match Subclass::from_string(&line) {
             Some(v) => res.push(v),
             None => continue,
         }
@@ -135,7 +129,7 @@ mod tests {
     #[test]
     fn from_str() {
         assert_eq!(
-            Subclass::from_string("message/partial text/plain".to_string()).unwrap(),
+            Subclass::from_string("message/partial text/plain").unwrap(),
             Subclass::new("message/partial", "text/plain")
         );
     }
@@ -151,5 +145,10 @@ mod tests {
             pm.lookup(&"message/partial".to_string()),
             Some(&vec!["text/plain".to_string(),])
         );
+    }
+
+    #[test]
+    fn extra_tokens_yield_error() {
+        assert!(Subclass::from_string("one/foo two/foo three/foo").is_none());
     }
 }

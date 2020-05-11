@@ -44,30 +44,16 @@ impl Icon {
     }
 
     pub fn from_string(s: &str) -> Option<Icon> {
-        let mut chunks = s.split(':');
+        let mut chunks = s.split(':').fuse();
+        let mime_type = chunks.next().filter(|s| !s.is_empty())?;
+        let icon_name = chunks.next().filter(|s| !s.is_empty())?;
 
-        let mime_type = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        let icon_name = match chunks.next() {
-            Some(v) => v.to_string(),
-            None => return None,
-        };
-
-        if icon_name.is_empty() || mime_type.is_empty() {
+        // Consume the leftovers, if any
+        if chunks.next().is_some() {
             return None;
         }
 
-        if chunks.count() != 0 {
-            return None;
-        }
-
-        Some(Icon {
-            icon_name,
-            mime_type,
-        })
+        Some(Icon::new(icon_name, mime_type))
     }
 }
 
@@ -130,5 +116,14 @@ mod tests {
             Icon::from_string("application/rss+xml:text-html").unwrap(),
             Icon::new("text-html", "application/rss+xml")
         );
+    }
+
+    #[test]
+    fn from_str_catches_syntax_error() {
+        assert!(Icon::from_string("one:two:three").is_none());
+        assert!(Icon::from_string(":").is_none());
+        assert!(Icon::from_string("one:").is_none());
+        assert!(Icon::from_string(":two").is_none());
+        assert!(Icon::from_string("").is_none());
     }
 }
