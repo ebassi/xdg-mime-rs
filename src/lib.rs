@@ -49,6 +49,17 @@ impl Default for SharedMimeInfo {
 }
 
 impl SharedMimeInfo {
+    fn create() -> SharedMimeInfo {
+        SharedMimeInfo {
+            aliases: alias::AliasesList::new(),
+            parents: parent::ParentsMap::new(),
+            icons: Vec::new(),
+            generic_icons: Vec::new(),
+            globs: glob::GlobMap::new(),
+            magic: Vec::new(),
+        }
+    }
+
     fn load_directory<P: AsRef<Path>>(&mut self, directory: P) {
         let mut mime_path = PathBuf::new();
         mime_path.push(directory);
@@ -71,17 +82,6 @@ impl SharedMimeInfo {
 
         let magic_entries = magic::read_magic_from_dir(&mime_path);
         self.magic.extend(magic_entries);
-    }
-
-    fn create() -> SharedMimeInfo {
-        SharedMimeInfo {
-            aliases: alias::AliasesList::new(),
-            parents: parent::ParentsMap::new(),
-            icons: Vec::new(),
-            generic_icons: Vec::new(),
-            globs: glob::GlobMap::new(),
-            magic: Vec::new(),
-        }
     }
 
     /// Creates a new SharedMimeInfo database containing all MIME information
@@ -111,40 +111,16 @@ impl SharedMimeInfo {
 
     /// Load all the MIME information under @directory, and create a new
     /// SharedMimeInfo for it. This method is only really useful for
-    /// testing purposes.
+    /// testing purposes; you should use SharedMimeInfo::new() instead.
     pub fn new_for_directory<P: AsRef<Path>>(directory: P) -> SharedMimeInfo {
-        let mut mime_path = PathBuf::new();
-        mime_path.push(directory);
-        mime_path.push("mime");
+        let mut db = SharedMimeInfo::create();
 
-        let mut alias_list = alias::AliasesList::new();
-        let aliases = alias::read_aliases_from_dir(&mime_path);
-        alias_list.add_aliases(aliases);
+        db.load_directory(directory);
 
-        let icons = icon::read_icons_from_dir(&mime_path, false);
-        let generic_icons = icon::read_icons_from_dir(&mime_path, true);
-
-        let mut parents_map = parent::ParentsMap::new();
-        let subclasses = parent::read_subclasses_from_dir(&mime_path);
-        parents_map.add_subclasses(subclasses);
-
-        let mut glob_map = glob::GlobMap::new();
-        let globs = glob::read_globs_from_dir(&mime_path);
-        glob_map.add_globs(globs);
-
-        let magic_entries = magic::read_magic_from_dir(&mime_path);
-
-        SharedMimeInfo {
-            aliases: alias_list,
-            parents: parents_map,
-            globs: glob_map,
-            icons,
-            generic_icons,
-            magic: magic_entries,
-        }
+        db
     }
 
-    /// Retrieves the MIME type aliased by @mime_type, if any.
+    /// Retrieves the MIME type aliased by a MIME type, if any.
     pub fn unalias_mime_type(&self, mime_type: &str) -> Option<String> {
         self.aliases.unalias_mime_type(mime_type)
     }
