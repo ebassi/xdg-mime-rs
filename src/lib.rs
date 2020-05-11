@@ -177,7 +177,7 @@ impl SharedMimeInfo {
         let mut res = Vec::new();
         res.push(unaliased.clone());
 
-        if let Some(parents) = self.parents.lookup(unaliased) {
+        if let Some(parents) = self.parents.lookup(&unaliased) {
             for parent in parents {
                 res.push(parent.clone());
             }
