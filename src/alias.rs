@@ -48,6 +48,11 @@ impl Alias {
         let alias = chunks.next()?;
         let mime_type = chunks.next()?;
 
+        // Consume the leftovers, if any
+        if chunks.next().is_some() {
+            return None;
+        }
+
         Some(Alias::new(alias, mime_type))
     }
 }
@@ -134,5 +139,10 @@ mod tests {
             Alias::from_string("application/x-foo application/foo").unwrap(),
             Alias::new("application/x-foo", "application/foo")
         );
+    }
+
+    #[test]
+    fn extra_tokens_yield_error() {
+        assert!(Alias::from_string("one/foo two/foo three/foo").is_none());
     }
 }
