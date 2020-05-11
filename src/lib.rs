@@ -222,14 +222,10 @@ impl SharedMimeInfo {
         }
     }
 
-    /// Retrieves the MIME type for the given data.
-    pub fn get_mime_type_for_data(&self, data: &[u8]) -> Option<String> {
-        let mime_type = match magic::lookup_data(&self.magic, data) {
-            Some(v) => v.0,
-            None => return None,
-        };
-
-        Some(mime_type)
+    /// Retrieves the MIME type for the given data, and the priority of the
+    /// match. A priority above 80 means a certain match.
+    pub fn get_mime_type_for_data(&self, data: &[u8]) -> Option<(String, u32)> {
+        magic::lookup_data(&self.magic, data)
     }
 
     /// Checks whether two MIME types are equal, taking into account
@@ -344,13 +340,13 @@ mod tests {
         let svg_data = include_bytes!("../test_files/files/rust-logo.svg");
         assert_eq!(
             mime_db.get_mime_type_for_data(svg_data),
-            Some("image/svg+xml".to_string())
+            Some(("image/svg+xml".to_string(), 80))
         );
 
         let png_data = include_bytes!("../test_files/files/rust-logo.png");
         assert_eq!(
             mime_db.get_mime_type_for_data(png_data),
-            Some("image/png".to_string())
+            Some(("image/png".to_string(), 50))
         );
     }
 }
