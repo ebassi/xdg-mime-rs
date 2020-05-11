@@ -25,6 +25,11 @@ impl Subclass {
         let mime_type = chunks.next()?;
         let parent_type = chunks.next()?;
 
+        // Consume the leftovers, if any
+        if chunks.next().is_some() {
+            return None;
+        }
+
         Some(Subclass::new(mime_type, parent_type))
     }
 }
@@ -140,5 +145,10 @@ mod tests {
             pm.lookup(&"message/partial".to_string()),
             Some(&vec!["text/plain".to_string(),])
         );
+    }
+
+    #[test]
+    fn extra_tokens_yield_error() {
+        assert!(Subclass::from_string("one/foo two/foo three/foo").is_none());
     }
 }
