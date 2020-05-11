@@ -108,7 +108,8 @@ impl Glob {
         let mime_type = chunks.next().filter(|s| !s.is_empty())?;
         let glob = chunks.next().filter(|s| !s.is_empty())?;
 
-        // Consume the leftovers, if any
+        // The globs file is not extensible, so consume any
+        // leftover tokens
         if chunks.next().is_some() {
             return None;
         }
@@ -119,24 +120,27 @@ impl Glob {
     pub fn from_v2_string(s: &str) -> Option<Glob> {
         let mut chunks = s.split(':').fuse();
 
-        let weight = chunks.next()
+        let weight = chunks
+            .next()
             .and_then(|v| v.parse::<i32>().ok())
             .filter(|n| *n >= 0)?;
 
         let mime_type = chunks.next()?;
         let glob = chunks.next()?;
 
-        let case_sensitive = match chunks.next() {
-            Some("cs") => true,
-            None => false,
+        let mut case_sensitive = false;
+        if let Some(flags) = chunks.next() {
+            let flags_chunks = flags.split(',').collect::<Vec<&str>>();
 
-            Some(_) => return None,
-        };
-
-        // Consume the leftovers, if any
-        if chunks.next().is_some() {
-            return None;
+            // Allow for extra flags
+            if flags_chunks.iter().any(|&f| f == "cs") {
+                case_sensitive = true;
+            }
         }
+
+        // Ignore any other token, for extensibility:
+        //
+        // https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#idm46152099256048
 
         Some(Glob::new(mime_type, glob, weight, case_sensitive))
     }
@@ -179,7 +183,7 @@ pub fn read_globs_v1_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
-        if let Err(_) = line {
+        if line.is_err() {
             return None;
         }
 
@@ -207,7 +211,7 @@ pub fn read_globs_v2_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
-        if let Err(_) = line {
+        if line.is_err() {
             return None;
         }
 
@@ -368,6 +372,11 @@ mod tests {
         assert_eq!(Glob::from_v2_string(":"), None);
         assert_eq!(Glob::from_v2_string("foo:bar:baz"), None);
         assert_eq!(Glob::from_v2_string("foo:bar:baz:blah"), None);
+
+        assert_eq!(
+            Glob::from_v2_string("50:text/x-c++src:*.C:cs,newflag:newfeature:somethingelse"),
+            Some(Glob::new("text/x-c++src", "*.C", 50, true))
+        );
     }
 
     #[test]
