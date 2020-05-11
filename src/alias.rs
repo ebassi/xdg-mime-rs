@@ -43,7 +43,7 @@ impl Alias {
         }
     }
 
-    pub fn from_string(s: String) -> Option<Alias> {
+    pub fn from_string(s: &str) -> Option<Alias> {
         let mut chunks = s.split_whitespace().fuse();
         let alias = chunks.next()?;
         let mime_type = chunks.next()?;
@@ -99,7 +99,7 @@ pub fn read_aliases_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Alias> {
             continue;
         }
 
-        match Alias::from_string(line) {
+        match Alias::from_string(&line) {
             Some(v) => res.push(v),
             None => continue,
         }
@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn from_str() {
         assert_eq!(
-            Alias::from_string("application/x-foo application/foo".to_string()).unwrap(),
+            Alias::from_string("application/x-foo application/foo").unwrap(),
             Alias::new("application/x-foo", "application/foo")
         );
     }
