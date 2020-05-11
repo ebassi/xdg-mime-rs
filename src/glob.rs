@@ -27,9 +27,8 @@ impl fmt::Debug for GlobType {
     }
 }
 
-fn determine_type<S: Into<String>>(glob: S) -> GlobType {
+fn determine_type(glob: &str) -> GlobType {
     let mut maybe_simple = false;
-    let glob = glob.into();
 
     for (idx, ch) in glob.bytes().enumerate() {
         if idx == 0 && ch == b'*' {
@@ -42,7 +41,7 @@ fn determine_type<S: Into<String>>(glob: S) -> GlobType {
     if maybe_simple {
         GlobType::Simple(glob[1..].to_string())
     } else {
-        GlobType::Literal(glob)
+        GlobType::Literal(glob.to_string())
     }
 }
 
@@ -77,45 +76,34 @@ impl PartialOrd for Glob {
 }
 
 impl Glob {
-    pub fn simple<S: Into<String>>(mime_type: S, glob: S) -> Glob {
-        let mime_type = mime_type.into();
-        let glob = glob.into();
-
+    pub fn simple(mime_type: &str, glob: &str) -> Glob {
         Glob {
-            mime_type,
+            mime_type: mime_type.to_string(),
             glob: determine_type(glob),
             weight: 50,
             case_sensitive: false,
         }
     }
 
-    pub fn with_weight<S: Into<String>>(mime_type: S, glob: S, weight: i32) -> Glob {
-        let mime_type = mime_type.into();
-        let glob = glob.into();
-
+    pub fn with_weight(mime_type: &str, glob: &str, weight: i32) -> Glob {
         Glob {
-            mime_type,
+            mime_type: mime_type.to_string(),
             glob: determine_type(glob),
             weight,
             case_sensitive: false,
         }
     }
 
-    pub fn new<S: Into<String>>(mime_type: S, glob: S, weight: i32, cs: bool) -> Glob {
-        let mime_type = mime_type.into();
-        let glob = glob.into();
-
+    pub fn new(mime_type: &str, glob: &str, weight: i32, cs: bool) -> Glob {
         Glob {
-            mime_type,
+            mime_type: mime_type.to_string(),
             glob: determine_type(glob),
             weight,
             case_sensitive: cs,
         }
     }
 
-    pub fn from_v1_string<S: Into<String>>(s: S) -> Option<Glob> {
-        let s = s.into();
-
+    pub fn from_v1_string(s: &str) -> Option<Glob> {
         if s.is_empty() || !s.contains(':') {
             return None;
         }
@@ -142,16 +130,14 @@ impl Glob {
         }
 
         Some(Glob {
-            glob: determine_type(glob),
+            glob: determine_type(&glob),
             mime_type,
             weight: 50,
             case_sensitive: false,
         })
     }
 
-    pub fn from_v2_string<S: Into<String>>(s: S) -> Option<Glob> {
-        let s = s.into();
-
+    pub fn from_v2_string(s: &str) -> Option<Glob> {
         if s.is_empty() || !s.contains(':') {
             return None;
         }
@@ -198,7 +184,7 @@ impl Glob {
         }
 
         Some(Glob {
-            glob: determine_type(glob),
+            glob: determine_type(&glob),
             weight,
             case_sensitive,
             mime_type,
@@ -243,13 +229,17 @@ pub fn read_globs_v1_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
+        if let Err(_) = line {
+            return None;
+        }
+
         let line = line.unwrap();
 
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
 
-        match Glob::from_v1_string(line) {
+        match Glob::from_v1_string(&line) {
             Some(v) => res.push(v),
             None => continue,
         }
@@ -267,13 +257,17 @@ pub fn read_globs_v2_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
+        if let Err(_) = line {
+            return None;
+        }
+
         let line = line.unwrap();
 
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
 
-        match Glob::from_v2_string(line) {
+        match Glob::from_v2_string(&line) {
             Some(v) => res.push(v),
             None => continue,
         }
@@ -311,8 +305,8 @@ impl GlobMap {
         self.globs.push(glob);
     }
 
-    pub fn add_globs(&mut self, globs: Vec<Glob>) {
-        self.globs.extend(globs);
+    pub fn add_globs(&mut self, globs: &[Glob]) {
+        self.globs.extend_from_slice(globs);
     }
 
     pub fn lookup_mime_type_for_file_name(&self, file_name: &str) -> Option<Vec<String>> {
@@ -330,10 +324,10 @@ impl GlobMap {
 
         matching_globs.sort();
 
-        let mut res = Vec::new();
-        for glob in matching_globs {
-            res.push(glob.mime_type.clone());
-        }
+        let res = matching_globs
+            .iter()
+            .map(|glob| glob.mime_type.clone())
+            .collect();
 
         Some(res)
     }

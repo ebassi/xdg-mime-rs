@@ -13,10 +13,10 @@ pub struct Subclass {
 }
 
 impl Subclass {
-    pub fn new<S: Into<String>>(mime_type: S, parent_type: S) -> Subclass {
+    pub fn new(mime_type: &str, parent_type: &str) -> Subclass {
         Subclass {
-            mime_type: mime_type.into(),
-            parent_type: parent_type.into(),
+            mime_type: mime_type.to_string(),
+            parent_type: parent_type.to_string(),
         }
     }
 
@@ -91,10 +91,8 @@ impl ParentsMap {
         }
     }
 
-    pub fn lookup<S: Into<String>>(&self, mime_type: S) -> Option<&Vec<String>> {
-        let mime_type = mime_type.into();
-
-        self.parents.get(&mime_type)
+    pub fn lookup(&self, mime_type: &str) -> Option<&Vec<String>> {
+        self.parents.get(mime_type)
     }
 }
 
