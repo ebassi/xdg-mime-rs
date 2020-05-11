@@ -316,10 +316,10 @@ impl GlobMap {
 
         matching_globs.sort();
 
-        let mut res = Vec::new();
-        for glob in matching_globs {
-            res.push(glob.mime_type.clone());
-        }
+        let res = matching_globs
+            .iter()
+            .map(|glob| glob.mime_type.clone())
+            .collect();
 
         Some(res)
     }
