@@ -1,5 +1,6 @@
 #![cfg(any(unix, target_os = "redox"))]
-// FIXME: Remove
+
+// FIXME: Remove once we test everything
 #![allow(dead_code)]
 
 /// SharedMimeInfo allows to look up the MIME type associated to a file name
@@ -287,7 +288,12 @@ mod tests {
 
     #[test]
     fn load_system() {
-        SharedMimeInfo::new();
+        let _db = SharedMimeInfo::new();
+    }
+
+    #[test]
+    fn load_default() {
+        let _db: SharedMimeInfo = Default::default();
     }
 
     #[test]
