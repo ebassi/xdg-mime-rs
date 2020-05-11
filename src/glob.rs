@@ -103,9 +103,7 @@ impl Glob {
         }
     }
 
-    pub fn from_v1_string<S: Into<String>>(s: S) -> Option<Glob> {
-        let s = s.into();
-
+    pub fn from_v1_string(s: &str) -> Option<Glob> {
         if s.is_empty() || !s.contains(':') {
             return None;
         }
@@ -139,9 +137,7 @@ impl Glob {
         })
     }
 
-    pub fn from_v2_string<S: Into<String>>(s: S) -> Option<Glob> {
-        let s = s.into();
-
+    pub fn from_v2_string(s: &str) -> Option<Glob> {
         if s.is_empty() || !s.contains(':') {
             return None;
         }
@@ -239,7 +235,7 @@ pub fn read_globs_v1_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
             continue;
         }
 
-        match Glob::from_v1_string(line) {
+        match Glob::from_v1_string(&line) {
             Some(v) => res.push(v),
             None => continue,
         }
@@ -263,7 +259,7 @@ pub fn read_globs_v2_from_file<P: AsRef<Path>>(file_name: P) -> Option<Vec<Glob>
             continue;
         }
 
-        match Glob::from_v2_string(line) {
+        match Glob::from_v2_string(&line) {
             Some(v) => res.push(v),
             None => continue,
         }
