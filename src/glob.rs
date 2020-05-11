@@ -108,7 +108,8 @@ impl Glob {
         let mime_type = chunks.next().filter(|s| !s.is_empty())?;
         let glob = chunks.next().filter(|s| !s.is_empty())?;
 
-        // Consume the leftovers, if any
+        // The globs file is not extensible, so consume any
+        // leftover tokens
         if chunks.next().is_some() {
             return None;
         }
@@ -119,7 +120,8 @@ impl Glob {
     pub fn from_v2_string(s: &str) -> Option<Glob> {
         let mut chunks = s.split(':').fuse();
 
-        let weight = chunks.next()
+        let weight = chunks
+            .next()
             .and_then(|v| v.parse::<i32>().ok())
             .filter(|n| *n >= 0)?;
 
@@ -133,10 +135,9 @@ impl Glob {
             Some(_) => return None,
         };
 
-        // Consume the leftovers, if any
-        if chunks.next().is_some() {
-            return None;
-        }
+        // Ignore any other token, for extensibility:
+        //
+        // https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#idm46152099256048
 
         Some(Glob::new(mime_type, glob, weight, case_sensitive))
     }
@@ -368,6 +369,11 @@ mod tests {
         assert_eq!(Glob::from_v2_string(":"), None);
         assert_eq!(Glob::from_v2_string("foo:bar:baz"), None);
         assert_eq!(Glob::from_v2_string("foo:bar:baz:blah"), None);
+
+        assert_eq!(
+            Glob::from_v2_string("50:text/x-c++src:*.C:cs:newflag:newfeature:somethingelse"),
+            Some(Glob::new("text/x-c++src", "*.C", 50, true))
+        );
     }
 
     #[test]
