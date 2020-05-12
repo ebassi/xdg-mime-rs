@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::io::BufRead;
@@ -16,8 +15,6 @@ pub enum GlobType {
     Simple(String),
     Full(Pattern),
 }
-
-impl Eq for GlobType {}
 
 impl fmt::Debug for GlobType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -47,7 +44,7 @@ fn determine_type(glob: &str) -> GlobType {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Glob {
     glob: GlobType,
     weight: i32,
@@ -62,18 +59,6 @@ impl fmt::Debug for Glob {
             "Glob: {:?} {:?} (weight: {}, cs: {})",
             self.glob, self.mime_type, self.weight, self.case_sensitive
         )
-    }
-}
-
-impl Ord for Glob {
-    fn cmp(&self, other: &Glob) -> Ordering {
-        self.weight.cmp(&other.weight)
-    }
-}
-
-impl PartialOrd for Glob {
-    fn partial_cmp(&self, other: &Glob) -> Option<Ordering> {
-        Some(self.weight.cmp(&other.weight))
     }
 }
 
@@ -278,7 +263,7 @@ impl GlobMap {
             return None;
         }
 
-        matching_globs.sort();
+        matching_globs.sort_by(|a, b| a.weight.cmp(&b.weight));
 
         let res = matching_globs
             .iter()

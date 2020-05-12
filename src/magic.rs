@@ -4,7 +4,6 @@ use nom::character::is_hex_digit;
 use nom::character::complete::line_ending;
 use nom::combinator::map_res;
 use nom::number::streaming::{be_u16};
-use std::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
@@ -30,7 +29,7 @@ pub fn buf_to_u32(s: &[u8], or_default: u32) -> u32 {
     to_u32(to_string(s), or_default)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 struct MagicRule {
     indent: u32,
     start_offset: u32,
@@ -169,7 +168,7 @@ named!(
     )
 );
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct MagicEntry {
     mime_type: Mime,
     priority: u32,
@@ -183,18 +182,6 @@ impl fmt::Debug for MagicEntry {
             "MIME type: {:?} (priority: {:?}):\nrules:\n{:?}",
             self.mime_type, self.priority, self.rules
         )
-    }
-}
-
-impl Ord for MagicEntry {
-    fn cmp(&self, other: &MagicEntry) -> Ordering {
-        self.priority.cmp(&other.priority)
-    }
-}
-
-impl PartialOrd for MagicEntry {
-    fn partial_cmp(&self, other: &MagicEntry) -> Option<Ordering> {
-        Some(self.priority.cmp(&other.priority))
     }
 }
 

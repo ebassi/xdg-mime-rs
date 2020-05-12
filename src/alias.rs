@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::io::BufRead;
@@ -8,7 +7,7 @@ use std::str::FromStr;
 
 use mime::Mime;
 
-#[derive(Clone, Eq)]
+#[derive(Clone, PartialEq)]
 pub struct Alias {
     pub alias: Mime,
     pub mime_type: Mime,
@@ -17,24 +16,6 @@ pub struct Alias {
 impl fmt::Debug for Alias {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Alias {} {}", self.alias, self.mime_type)
-    }
-}
-
-impl PartialEq for Alias {
-    fn eq(&self, other: &Alias) -> bool {
-        self.alias == other.alias
-    }
-}
-
-impl Ord for Alias {
-    fn cmp(&self, other: &Alias) -> Ordering {
-        self.alias.cmp(&other.alias)
-    }
-}
-
-impl PartialOrd for Alias {
-    fn partial_cmp(&self, other: &Alias) -> Option<Ordering> {
-        Some(self.alias.cmp(&other.alias))
     }
 }
 
@@ -58,6 +39,10 @@ impl Alias {
 
         Some(Alias { alias, mime_type })
     }
+
+    pub fn is_equivalent(&self, other: &Alias) -> bool {
+        self.alias == other.alias
+    }
 }
 
 pub struct AliasesList {
@@ -80,7 +65,7 @@ impl AliasesList {
     }
 
     pub fn sort(&mut self) {
-        self.aliases.sort_unstable();
+        self.aliases.sort_by(|a, b| a.alias.cmp(&b.alias))
     }
 
     pub fn unalias_mime_type(&self, mime_type: &Mime) -> Option<Mime> {
@@ -134,15 +119,14 @@ mod tests {
 
     #[test]
     fn new_alias() {
-        assert_eq!(
+        assert!(
             Alias::new(
                 &Mime::from_str("application/foo").unwrap(),
                 &Mime::from_str("application/foo").unwrap()
-            ),
-            Alias::new(
+            ).is_equivalent(&Alias::new(
                 &Mime::from_str("application/foo").unwrap(),
                 &Mime::from_str("application/x-foo").unwrap()
-            ),
+            )),
         );
     }
 

@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::io::BufRead;
@@ -8,7 +7,7 @@ use std::str::FromStr;
 
 use mime::Mime;
 
-#[derive(Clone, Eq)]
+#[derive(Clone, PartialEq)]
 pub struct Icon {
     icon_name: String,
     mime_type: Mime,
@@ -17,24 +16,6 @@ pub struct Icon {
 impl fmt::Debug for Icon {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Icon for {}: {}", self.mime_type, self.icon_name)
-    }
-}
-
-impl PartialEq for Icon {
-    fn eq(&self, other: &Icon) -> bool {
-        self.mime_type == other.mime_type
-    }
-}
-
-impl Ord for Icon {
-    fn cmp(&self, other: &Icon) -> Ordering {
-        self.mime_type.cmp(&other.mime_type)
-    }
-}
-
-impl PartialOrd for Icon {
-    fn partial_cmp(&self, other: &Icon) -> Option<Ordering> {
-        Some(self.mime_type.cmp(&other.mime_type))
     }
 }
 
@@ -88,7 +69,7 @@ pub fn read_icons_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Icon> {
         }
     }
 
-    res.sort_unstable();
+    res.sort_by(|a, b| a.mime_type.cmp(&b.mime_type));
 
     res
 }
