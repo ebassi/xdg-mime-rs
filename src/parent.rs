@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -9,7 +8,7 @@ use std::str::FromStr;
 
 use mime::Mime;
 
-#[derive(Clone, Eq)]
+#[derive(Clone, PartialEq)]
 pub struct Subclass {
     mime_type: Mime,
     parent_type: Mime,
@@ -40,24 +39,6 @@ impl Subclass {
 impl fmt::Debug for Subclass {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Subclass {} {}", self.parent_type, self.mime_type)
-    }
-}
-
-impl PartialEq for Subclass {
-    fn eq(&self, other: &Subclass) -> bool {
-        self.parent_type == other.parent_type
-    }
-}
-
-impl Ord for Subclass {
-    fn cmp(&self, other: &Subclass) -> Ordering {
-        self.parent_type.cmp(&other.parent_type)
-    }
-}
-
-impl PartialOrd for Subclass {
-    fn partial_cmp(&self, other: &Subclass) -> Option<Ordering> {
-        Some(self.parent_type.cmp(&other.parent_type))
     }
 }
 
