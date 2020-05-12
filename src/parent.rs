@@ -33,7 +33,7 @@ impl Subclass {
             return None;
         }
 
-        Some(Subclass::new(&mime_type, &parent_type))
+        Some(Subclass { mime_type, parent_type })
     }
 }
 

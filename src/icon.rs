@@ -4,11 +4,14 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use mime::Mime;
 
 #[derive(Clone, Eq)]
 pub struct Icon {
     icon_name: String,
-    mime_type: String,
+    mime_type: Mime,
 }
 
 impl fmt::Debug for Icon {
@@ -36,16 +39,16 @@ impl PartialOrd for Icon {
 }
 
 impl Icon {
-    pub fn new<S: Into<String>>(icon_name: S, mime_type: S) -> Icon {
+    pub fn new(icon_name: &str, mime_type: &Mime) -> Icon {
         Icon {
-            icon_name: icon_name.into(),
-            mime_type: mime_type.into(),
+            icon_name: icon_name.to_string(),
+            mime_type: mime_type.clone(),
         }
     }
 
     pub fn from_string(s: &str) -> Option<Icon> {
         let mut chunks = s.split(':').fuse();
-        let mime_type = chunks.next().filter(|s| !s.is_empty())?;
+        let mime_type = chunks.next().and_then(|s| Mime::from_str(s).ok())?;
         let icon_name = chunks.next().filter(|s| !s.is_empty())?;
 
         // Consume the leftovers, if any
@@ -53,7 +56,10 @@ impl Icon {
             return None;
         }
 
-        Some(Icon::new(icon_name, mime_type))
+        Some(Icon {
+            icon_name: icon_name.to_string(),
+            mime_type
+        })
     }
 }
 
@@ -100,9 +106,9 @@ pub fn read_icons_from_dir<P: AsRef<Path>>(dir: P, generic: bool) -> Vec<Icon> {
     read_icons_from_file(icons_file)
 }
 
-pub fn find_icon(icons: &[Icon], mime_type: &str) -> Option<String> {
+pub fn find_icon(icons: &[Icon], mime_type: &Mime) -> Option<String> {
     for icon in icons {
-        if icon.mime_type == mime_type {
+        if icon.mime_type == *mime_type {
             return Some(icon.icon_name.clone());
         }
     }
@@ -118,7 +124,7 @@ mod tests {
     fn from_str() {
         assert_eq!(
             Icon::from_string("application/rss+xml:text-html").unwrap(),
-            Icon::new("text-html", "application/rss+xml")
+            Icon::new("text-html", &Mime::from_str("application/rss+xml").unwrap())
         );
     }
 

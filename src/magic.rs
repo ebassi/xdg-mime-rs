@@ -1,13 +1,19 @@
+use nom::IResult;
+use nom::bytes::complete::take_until;
 use nom::character::is_hex_digit;
 use nom::character::complete::line_ending;
+use nom::combinator::map_res;
 use nom::number::streaming::{be_u16};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
-use std::str;
+use std::str::{self, FromStr};
 use std::vec::Vec;
+
+
+use mime::Mime;
 
 pub fn to_string(s: &[u8]) -> std::result::Result<&str, std::str::Utf8Error> {
     str::from_utf8(s)
@@ -165,7 +171,7 @@ named!(
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct MagicEntry {
-    mime_type: String,
+    mime_type: Mime,
     priority: u32,
     rules: Vec<MagicRule>,
 }
@@ -193,7 +199,7 @@ impl PartialOrd for MagicEntry {
 }
 
 impl MagicEntry {
-    fn matches(&self, data: &[u8]) -> Option<(&String, u32)> {
+    fn matches(&self, data: &[u8]) -> Option<(&Mime, u32)> {
         let mut current_level = 0;
 
         let mut iter = (&self.rules).iter().peekable();
@@ -237,16 +243,19 @@ named!(priority<u32>,
     )
 );
 
-named!(mime_type<&str>,
-    map_res!(
-        take_until!("]\n"),
-        str::from_utf8
-    )
-);
+fn mime_type(bytes: &[u8]) -> IResult<&[u8], Mime> {
+    map_res(
+        map_res(
+            take_until("]\n"),
+            str::from_utf8
+        ),
+        Mime::from_str
+    )(bytes)
+}
 
 // magic_header =
 // '[' <priority> ':' <mime_type> ']' '\n'
-named!(magic_header<(u32, &str)>,
+named!(magic_header<(u32, Mime)>,
     do_parse!(
         tag!("[")
     >>  _priority: priority
@@ -280,7 +289,7 @@ named!(from_u8_to_entries<Vec<MagicEntry>>,
     )
 );
 
-pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(String, u32)> {
+pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
     for entry in entries {
         if let Some(v) = entry.matches(data) {
             return Some((v.0.clone(), v.1))
