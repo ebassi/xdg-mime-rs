@@ -102,6 +102,10 @@ pub fn read_subclasses_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Subclass> 
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
+        if line.is_err() {
+            return res; // FIXME: return error instead
+        }
+
         let line = line.unwrap();
 
         if line.is_empty() || line.starts_with('#') {
