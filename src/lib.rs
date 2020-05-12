@@ -27,12 +27,6 @@ mod icon;
 mod magic;
 mod parent;
 
-/// Convenience identifier for an unknown MIME type.
-pub const UNKNOWN_TYPE: Mime = mime::APPLICATION_OCTET_STREAM;
-
-/// Convenience identifier for the MIME type for an empty file.
-pub static EMPTY_TYPE: &str = "application/x-zerosize";
-
 pub struct SharedMimeInfo {
     aliases: alias::AliasesList,
     parents: parent::ParentsMap,
@@ -183,12 +177,15 @@ impl SharedMimeInfo {
 
     /// Retrieves the list of matching MIME types for the given file name,
     /// without looking at the data inside the file.
+    ///
+    /// If no specific MIME-type can be determined, returns a single
+    /// element vector with `application/octet-stream`.
     pub fn get_mime_types_from_file_name(&self, file_name: &str) -> Vec<Mime> {
         match self.globs.lookup_mime_type_for_file_name(file_name) {
             Some(v) => v,
             None => {
                 let mut res = Vec::new();
-                res.push(UNKNOWN_TYPE.clone());
+                res.push(mime::APPLICATION_OCTET_STREAM.clone());
                 res
             }
         }
