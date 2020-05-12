@@ -1,3 +1,6 @@
+[![crates.io](https://img.shields.io/crates/v/mime.svg)](https://crates.io/crates/xdg_mime)
+[![docs.rs](https://docs.rs/mime/badge.svg)](https://docs.rs/xdg_mime)
+
 xdg-mime-rs
 ===========
 
@@ -9,6 +12,8 @@ Xdg-mime-rs is a complete re-implementation of the [xdgmime][xdgmime] C
 library, with some added functionality that typically resides in higher
 level components, like determining the appropriate icon name for a file
 from the [icon theme][fdo-icon-theme].
+
+[Dumentation][docs].
 
 Installation
 ------------
@@ -25,11 +30,6 @@ or install [`cargo-edit`][cargo-edit] and call:
 ```
 cargo add xdg_mime@0.1
 ```
-
-Examples
---------
-
-See the [documentation][docs].
 
 Copyright and license
 ---------------------
