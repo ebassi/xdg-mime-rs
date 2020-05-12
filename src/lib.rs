@@ -3,15 +3,34 @@
 // FIXME: Remove once we test everything
 #![allow(dead_code)]
 
-/// SharedMimeInfo allows to look up the MIME type associated to a file name
-/// or to the contents of a file, using the [Freedesktop.org Shared MIME
-/// database specification][xdg-mime].
-///
-/// Alongside the MIME type, the Shared MIME database contains other ancillary
-/// information, like the icon associated to the MIME type; the aliases for
-/// a given MIME type; and the various sub-classes of a MIME type.
-///
-/// [xdg-mime]: https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html
+//! SharedMimeInfo allows to look up the MIME type associated to a file name
+//! or to the contents of a file, using the [Freedesktop.org Shared MIME
+//! database specification][xdg-mime].
+//!
+//! Alongside the MIME type, the Shared MIME database contains other ancillary
+//! information, like the icon associated to the MIME type; the aliases for
+//! a given MIME type; and the various sub-classes of a MIME type.
+//!
+//! [xdg-mime]: https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html
+//!
+//! ## Retrieving the MIME type of a file
+//!
+//! If you want to know the MIME type of a file, you typically have two
+//! options at your disposal:
+//!
+//!  - guess from the file name
+//!  - use an appropriately sized chunk of the file contents
+//!
+//! The former step does not come with performance penalties, or even requires
+//! the file to exist in the first place; the latter can be an arbitrarily
+//! expensive operation to perform.
+//!
+//! ```
+//! let mime_db = SharedMimeInfo::new();
+//! let mime_types: Vec<String> = mime_db.get_mime_types_from_file_name("file.txt").unwrap();
+//! assert_eq!(mime_types, vec!["text/plain"]);
+//! ```
+
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -27,6 +46,7 @@ mod icon;
 mod magic;
 mod parent;
 
+/// The shared MIME info database
 pub struct SharedMimeInfo {
     aliases: alias::AliasesList,
     parents: parent::ParentsMap,
