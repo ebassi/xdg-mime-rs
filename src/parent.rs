@@ -5,32 +5,35 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use mime::Mime;
 
 #[derive(Clone, Eq)]
 pub struct Subclass {
-    mime_type: String,
-    parent_type: String,
+    mime_type: Mime,
+    parent_type: Mime,
 }
 
 impl Subclass {
-    pub fn new(mime_type: &str, parent_type: &str) -> Subclass {
+    pub fn new(mime_type: &Mime, parent_type: &Mime) -> Subclass {
         Subclass {
-            mime_type: mime_type.to_string(),
-            parent_type: parent_type.to_string(),
+            mime_type: mime_type.clone(),
+            parent_type: parent_type.clone(),
         }
     }
 
     fn from_string(s: &str) -> Option<Subclass> {
         let mut chunks = s.split_whitespace().fuse();
-        let mime_type = chunks.next()?;
-        let parent_type = chunks.next()?;
+        let mime_type = chunks.next().and_then(|s| Mime::from_str(s).ok())?;
+        let parent_type = chunks.next().and_then(|s| Mime::from_str(s).ok())?;
 
         // Consume the leftovers, if any
         if chunks.next().is_some() {
             return None;
         }
 
-        Some(Subclass::new(mime_type, parent_type))
+        Some(Subclass { mime_type, parent_type })
     }
 }
 
@@ -59,7 +62,7 @@ impl PartialOrd for Subclass {
 }
 
 pub struct ParentsMap {
-    parents: HashMap<String, Vec<String>>,
+    parents: HashMap<Mime, Vec<Mime>>,
 }
 
 impl ParentsMap {
@@ -85,7 +88,7 @@ impl ParentsMap {
         }
     }
 
-    pub fn lookup(&self, mime_type: &str) -> Option<&Vec<String>> {
+    pub fn lookup(&self, mime_type: &Mime) -> Option<&Vec<Mime>> {
         self.parents.get(mime_type)
     }
 }
@@ -99,6 +102,10 @@ pub fn read_subclasses_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Subclass> 
     let mut res = Vec::new();
     let file = BufReader::new(&f);
     for line in file.lines() {
+        if line.is_err() {
+            return res; // FIXME: return error instead
+        }
+
         let line = line.unwrap();
 
         if line.is_empty() || line.starts_with('#') {
@@ -130,7 +137,10 @@ mod tests {
     fn from_str() {
         assert_eq!(
             Subclass::from_string("message/partial text/plain").unwrap(),
-            Subclass::new("message/partial", "text/plain")
+            Subclass::new(
+                &Mime::from_str("message/partial").unwrap(),
+                &Mime::from_str("text/plain").unwrap()
+            )
         );
     }
 
@@ -138,12 +148,18 @@ mod tests {
     fn parent_map() {
         let mut pm = ParentsMap::new();
 
-        pm.add_subclass(Subclass::new("message/partial", "text/plain"));
-        pm.add_subclass(Subclass::new("text/rfc822-headers", "text/plain"));
+        pm.add_subclass(Subclass::new(
+            &Mime::from_str("message/partial").unwrap(),
+            &Mime::from_str("text/plain").unwrap(),
+        ));
+        pm.add_subclass(Subclass::new(
+            &Mime::from_str("text/rfc822-headers").unwrap(),
+            &Mime::from_str("text/plain").unwrap(),
+        ));
 
         assert_eq!(
-            pm.lookup(&"message/partial".to_string()),
-            Some(&vec!["text/plain".to_string(),])
+            pm.lookup(&Mime::from_str("message/partial").unwrap()),
+            Some(&vec![Mime::from_str("text/plain").unwrap()]),
         );
     }
 

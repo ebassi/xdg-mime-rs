@@ -4,11 +4,14 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use mime::Mime;
 
 #[derive(Clone, Eq)]
 pub struct Alias {
-    pub alias: String,
-    pub mime_type: String,
+    pub alias: Mime,
+    pub mime_type: Mime,
 }
 
 impl fmt::Debug for Alias {
@@ -36,24 +39,24 @@ impl PartialOrd for Alias {
 }
 
 impl Alias {
-    pub fn new(alias: &str, mime_type: &str) -> Alias {
+    pub fn new(alias: &Mime, mime_type: &Mime) -> Alias {
         Alias {
-            alias: alias.to_string(),
-            mime_type: mime_type.to_string(),
+            alias: alias.clone(),
+            mime_type: mime_type.clone(),
         }
     }
 
     pub fn from_string(s: &str) -> Option<Alias> {
         let mut chunks = s.split_whitespace().fuse();
-        let alias = chunks.next()?;
-        let mime_type = chunks.next()?;
+        let alias = chunks.next().and_then(|s| Mime::from_str(s).ok())?;
+        let mime_type = chunks.next().and_then(|s| Mime::from_str(s).ok())?;
 
         // Consume the leftovers, if any
         if chunks.next().is_some() {
             return None;
         }
 
-        Some(Alias::new(alias, mime_type))
+        Some(Alias { alias, mime_type })
     }
 }
 
@@ -80,11 +83,11 @@ impl AliasesList {
         self.aliases.sort_unstable();
     }
 
-    pub fn unalias_mime_type(&self, mime_type: &str) -> Option<String> {
+    pub fn unalias_mime_type(&self, mime_type: &Mime) -> Option<Mime> {
         self.aliases
             .iter()
-            .find(|a| a.alias == mime_type)
-            .map(|a| a.mime_type.to_string())
+            .find(|a| a.alias == *mime_type)
+            .map(|a| a.mime_type.clone())
     }
 }
 
@@ -98,6 +101,10 @@ pub fn read_aliases_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Alias> {
 
     let file = BufReader::new(&f);
     for line in file.lines() {
+        if line.is_err() {
+            return res; // FIXME: return error instead
+        }
+
         let line = line.unwrap();
 
         if line.is_empty() || line.starts_with('#') {
@@ -128,8 +135,14 @@ mod tests {
     #[test]
     fn new_alias() {
         assert_eq!(
-            Alias::new("application/foo", "application/foo"),
-            Alias::new("application/foo", "application/x-foo")
+            Alias::new(
+                &Mime::from_str("application/foo").unwrap(),
+                &Mime::from_str("application/foo").unwrap()
+            ),
+            Alias::new(
+                &Mime::from_str("application/foo").unwrap(),
+                &Mime::from_str("application/x-foo").unwrap()
+            ),
         );
     }
 
@@ -137,7 +150,10 @@ mod tests {
     fn from_str() {
         assert_eq!(
             Alias::from_string("application/x-foo application/foo").unwrap(),
-            Alias::new("application/x-foo", "application/foo")
+            Alias::new(
+                &Mime::from_str("application/x-foo").unwrap(),
+                &Mime::from_str("application/foo").unwrap(),
+            )
         );
     }
 

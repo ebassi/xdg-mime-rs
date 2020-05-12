@@ -15,6 +15,8 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+use mime::Mime;
+
 extern crate dirs;
 #[macro_use]
 extern crate nom;
@@ -24,15 +26,6 @@ mod glob;
 mod icon;
 mod magic;
 mod parent;
-
-/// Convenience identifier for an unknown MIME type.
-pub static UNKNOWN_TYPE: &str = "application/octet-stream";
-
-/// Convenience identifier for the MIME type for an empty file.
-pub static EMPTY_TYPE: &str = "application/x-zerosize";
-
-/// Convenience identifier for the MIME type for a plain text file.
-pub static TEXT_PLAIN_TYPE: &str = "text/plain";
 
 pub struct SharedMimeInfo {
     aliases: alias::AliasesList,
@@ -122,28 +115,26 @@ impl SharedMimeInfo {
     }
 
     /// Retrieves the MIME type aliased by a MIME type, if any.
-    pub fn unalias_mime_type(&self, mime_type: &str) -> Option<String> {
+    pub fn unalias_mime_type(&self, mime_type: &Mime) -> Option<Mime> {
         self.aliases.unalias_mime_type(mime_type)
     }
 
     /// Looks up the icons associated to a MIME type.
     ///
     /// The icons can be looked up within the current icon theme.
-    pub fn lookup_icon_names(&self, mime_type: &str) -> Vec<String> {
+    pub fn lookup_icon_names(&self, mime_type: &Mime) -> Vec<String> {
         let mut res = Vec::new();
 
-        if let Some(v) = icon::find_icon(&self.icons, &mime_type) {
+        if let Some(v) = icon::find_icon(&self.icons, mime_type) {
             res.push(v);
         };
 
-        res.push(mime_type.replace("/", "-"));
+        res.push(mime_type.essence_str().replace("/", "-"));
 
         match icon::find_icon(&self.generic_icons, mime_type) {
             Some(v) => res.push(v),
             None => {
-                let split_type = mime_type.split('/').collect::<Vec<&str>>();
-
-                let generic = format!("{}-x-generic", split_type.get(0).unwrap());
+                let generic = format!("{}-x-generic", mime_type.type_());
                 res.push(generic);
             }
         };
@@ -154,13 +145,11 @@ impl SharedMimeInfo {
     /// Looks up the generic icon associated to a MIME type.
     ///
     /// The icon can be looked up within the current icon theme.
-    pub fn lookup_generic_icon_name(&self, mime_type: &str) -> Option<String> {
+    pub fn lookup_generic_icon_name(&self, mime_type: &Mime) -> Option<String> {
         let res = match icon::find_icon(&self.generic_icons, mime_type) {
             Some(v) => v,
             None => {
-                let split_type = mime_type.split('/').collect::<Vec<&str>>();
-
-                format!("{}-x-generic", split_type.get(0).unwrap())
+                format!("{}-x-generic", mime_type.type_())
             }
         };
 
@@ -168,7 +157,7 @@ impl SharedMimeInfo {
     }
 
     /// Looks up all the parent MIME types associated to @mime_type
-    pub fn get_parents(&self, mime_type: &str) -> Option<Vec<String>> {
+    pub fn get_parents(&self, mime_type: &Mime) -> Option<Vec<Mime>> {
         let unaliased = match self.aliases.unalias_mime_type(mime_type) {
             Some(v) => v,
             None => return None,
@@ -188,12 +177,15 @@ impl SharedMimeInfo {
 
     /// Retrieves the list of matching MIME types for the given file name,
     /// without looking at the data inside the file.
-    pub fn get_mime_types_from_file_name(&self, file_name: &str) -> Vec<String> {
+    ///
+    /// If no specific MIME-type can be determined, returns a single
+    /// element vector with `application/octet-stream`.
+    pub fn get_mime_types_from_file_name(&self, file_name: &str) -> Vec<Mime> {
         match self.globs.lookup_mime_type_for_file_name(file_name) {
             Some(v) => v,
             None => {
                 let mut res = Vec::new();
-                res.push(UNKNOWN_TYPE.to_string());
+                res.push(mime::APPLICATION_OCTET_STREAM.clone());
                 res
             }
         }
@@ -201,41 +193,42 @@ impl SharedMimeInfo {
 
     /// Retrieves the MIME type for the given data, and the priority of the
     /// match. A priority above 80 means a certain match.
-    pub fn get_mime_type_for_data(&self, data: &[u8]) -> Option<(String, u32)> {
+    pub fn get_mime_type_for_data(&self, data: &[u8]) -> Option<(Mime, u32)> {
         magic::lookup_data(&self.magic, data)
     }
 
     /// Checks whether two MIME types are equal, taking into account
     /// eventual aliases.
-    pub fn mime_type_equal(&self, mime_a: &str, mime_b: &str) -> bool {
+    pub fn mime_type_equal(&self, mime_a: &Mime, mime_b: &Mime) -> bool {
         let unaliased_a = self
             .unalias_mime_type(mime_a)
-            .unwrap_or_else(|| mime_a.to_string());
+            .unwrap_or_else(|| mime_a.clone());
         let unaliased_b = self
             .unalias_mime_type(mime_b)
-            .unwrap_or_else(|| mime_b.to_string());
+            .unwrap_or_else(|| mime_b.clone());
 
         unaliased_a == unaliased_b
     }
 
     /// Checks whether a MIME type is a subclass of another MIME type
-    pub fn mime_type_subclass(&self, mime_type: &str, base: &str) -> bool {
+    pub fn mime_type_subclass(&self, mime_type: &Mime, base: &Mime) -> bool {
         let unaliased_mime = self
             .unalias_mime_type(mime_type)
-            .unwrap_or_else(|| mime_type.to_string());
+            .unwrap_or_else(|| mime_type.clone());
         let unaliased_base = self
             .unalias_mime_type(base)
-            .unwrap_or_else(|| base.to_string());
+            .unwrap_or_else(|| base.clone());
 
         if unaliased_mime == unaliased_base {
             return true;
         }
 
         // Handle super-types
-        if unaliased_base.ends_with("/*") {
-            let chunks = unaliased_base.split('/').collect::<Vec<&str>>();
+        if unaliased_base.subtype() == mime::STAR {
+            let base_type = unaliased_base.type_();
+            let unaliased_type = unaliased_mime.type_();
 
-            if unaliased_mime.starts_with(chunks.get(0).unwrap()) {
+            if base_type == unaliased_type {
                 return true;
             }
         }
@@ -248,11 +241,11 @@ impl SharedMimeInfo {
         //    inode/* types) are subclasses of application/octet-stream
         //
         // https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#subclassing
-        if unaliased_base == "text/plain" && unaliased_mime.starts_with("text/") {
+        if unaliased_base == mime::TEXT_PLAIN && unaliased_mime.type_() == mime::TEXT {
             return true;
         }
 
-        if unaliased_base == "application/octet-stream" && !unaliased_mime.starts_with("inode/") {
+        if unaliased_base == mime::APPLICATION_OCTET_STREAM && unaliased_mime.type_() != "inode" {
             return true;
         }
 
@@ -272,6 +265,7 @@ impl SharedMimeInfo {
 mod tests {
     use super::*;
     use std::env;
+    use std::str::FromStr;
 
     fn load_test_data() -> SharedMimeInfo {
         let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
@@ -301,11 +295,11 @@ mod tests {
         let mime_db = load_test_data();
 
         assert_eq!(
-            mime_db.lookup_generic_icon_name("application/json"),
+            mime_db.lookup_generic_icon_name(&mime::APPLICATION_JSON),
             Some("text-x-script".to_string())
         );
         assert_eq!(
-            mime_db.lookup_generic_icon_name("text/plain"),
+            mime_db.lookup_generic_icon_name(&mime::TEXT_PLAIN),
             Some("text-x-generic".to_string())
         );
     }
@@ -315,10 +309,10 @@ mod tests {
         let mime_db = load_test_data();
 
         assert_eq!(
-            mime_db.unalias_mime_type("application/ics"),
-            Some("text/calendar".to_string())
+            mime_db.unalias_mime_type(&Mime::from_str("application/ics").unwrap()),
+            Some(Mime::from_str("text/calendar").unwrap())
         );
-        assert_eq!(mime_db.unalias_mime_type("text/plain"), None);
+        assert_eq!(mime_db.unalias_mime_type(&Mime::from_str("text/plain").unwrap()), None);
     }
 
     #[test]
@@ -326,27 +320,47 @@ mod tests {
         let mime_db = load_test_data();
 
         assert_eq!(
-            mime_db.mime_type_equal("application/wordperfect", "application/vnd.wordperfect"),
+            mime_db.mime_type_equal(
+                &Mime::from_str("application/wordperfect").unwrap(),
+                &Mime::from_str("application/vnd.wordperfect").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_equal("application/x-gnome-app-info", "application/x-desktop"),
+            mime_db.mime_type_equal(
+                &Mime::from_str("application/x-gnome-app-info").unwrap(),
+                &Mime::from_str("application/x-desktop").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_equal("application/x-wordperfect", "application/vnd.wordperfect"),
+            mime_db.mime_type_equal(
+                &Mime::from_str("application/x-wordperfect").unwrap(),
+                &Mime::from_str("application/vnd.wordperfect").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_equal("application/x-wordperfect", "audio/x-midi"),
+            mime_db.mime_type_equal(
+                &Mime::from_str("application/x-wordperfect").unwrap(),
+                &Mime::from_str("audio/x-midi").unwrap(),
+            ),
             false
         );
-        assert_eq!(mime_db.mime_type_equal("/", "vnd/vnd"), false);
         assert_eq!(
-            mime_db.mime_type_equal("application/octet-stream", "text/plain"),
+            mime_db.mime_type_equal(
+                &Mime::from_str("application/octet-stream").unwrap(),
+                &Mime::from_str("text/plain").unwrap(),
+            ),
             false
         );
-        assert_eq!(mime_db.mime_type_equal("text/plain", "text/*"), false);
+        assert_eq!(
+            mime_db.mime_type_equal(
+                &Mime::from_str("text/plain").unwrap(),
+                &Mime::from_str("text/*").unwrap(),
+            ),
+            false
+        );
     }
 
     #[test]
@@ -355,12 +369,12 @@ mod tests {
 
         assert_eq!(
             mime_db.get_mime_types_from_file_name("foo.txt"),
-            vec!["text/plain".to_string()]
+            vec![Mime::from_str("text/plain").unwrap()]
         );
 
         assert_eq!(
             mime_db.get_mime_types_from_file_name("bar.gif"),
-            vec!["image/gif".to_string()]
+            vec![Mime::from_str("image/gif").unwrap()]
         );
     }
 
@@ -371,13 +385,13 @@ mod tests {
         let svg_data = include_bytes!("../test_files/files/rust-logo.svg");
         assert_eq!(
             mime_db.get_mime_type_for_data(svg_data),
-            Some(("image/svg+xml".to_string(), 80))
+            Some((Mime::from_str("image/svg+xml").unwrap(), 80))
         );
 
         let png_data = include_bytes!("../test_files/files/rust-logo.png");
         assert_eq!(
             mime_db.get_mime_type_for_data(png_data),
-            Some(("image/png".to_string(), 50))
+            Some((Mime::from_str("image/png").unwrap(), 50))
         );
     }
 
@@ -386,46 +400,88 @@ mod tests {
         let mime_db = load_test_data();
 
         assert_eq!(
-            mime_db.mime_type_subclass("application/rtf", "text/plain"),
+            mime_db.mime_type_subclass(
+                &Mime::from_str("application/rtf").unwrap(),
+                &Mime::from_str("text/plain").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_subclass("message/news", "text/plain"),
+            mime_db.mime_type_subclass(
+                &Mime::from_str("message/news").unwrap(),
+                &Mime::from_str("text/plain").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_subclass("message/news", "message/*"),
-            true
-        );
-        assert_eq!(mime_db.mime_type_subclass("message/news", "text/*"), true);
-        assert_eq!(
-            mime_db.mime_type_subclass("message/news", "application/octet-stream"),
-            true
-        );
-        assert_eq!(
-            mime_db.mime_type_subclass("application/rtf", "application/octet-stream"),
+            mime_db.mime_type_subclass(
+                &Mime::from_str("message/news").unwrap(),
+                &Mime::from_str("message/*").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_subclass("application/x-gnome-app-info", "text/plain"),
+            mime_db.mime_type_subclass(
+                &Mime::from_str("message/news").unwrap(),
+                &Mime::from_str("text/*").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_subclass("image/x-djvu", "image/vnd.djvu"),
+            mime_db.mime_type_subclass(
+                &Mime::from_str("message/news").unwrap(),
+                &Mime::from_str("application/octet-stream").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_subclass("image/vnd.djvu", "image/x-djvu"),
+            mime_db.mime_type_subclass(
+                &Mime::from_str("application/rtf").unwrap(),
+                &Mime::from_str("application/octet-stream").unwrap(),
+            ),
             true
         );
         assert_eq!(
-            mime_db.mime_type_subclass("image/vnd.djvu", "text/plain"),
+            mime_db.mime_type_subclass(
+                &Mime::from_str("application/x-gnome-app-info").unwrap(),
+                &Mime::from_str("text/plain").unwrap(),
+            ),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass(
+                &Mime::from_str("image/x-djvu").unwrap(),
+                &Mime::from_str("image/vnd.djvu").unwrap(),
+            ),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass(
+                &Mime::from_str("image/vnd.djvu").unwrap(),
+                &Mime::from_str("image/x-djvu").unwrap(),
+            ),
+            true
+        );
+        assert_eq!(
+            mime_db.mime_type_subclass(
+                &Mime::from_str("image/vnd.djvu").unwrap(),
+                &Mime::from_str("text/plain").unwrap(),
+            ),
             false
         );
         assert_eq!(
-            mime_db.mime_type_subclass("image/vnd.djvu", "text/*"),
+            mime_db.mime_type_subclass(
+                &Mime::from_str("image/vnd.djvu").unwrap(),
+                &Mime::from_str("text/*").unwrap(),
+            ),
             false
         );
-        assert_eq!(mime_db.mime_type_subclass("text/*", "text/plain"), true);
+        assert_eq!(
+            mime_db.mime_type_subclass(
+                &Mime::from_str("text/*").unwrap(),
+                &Mime::from_str("text/plain").unwrap(),
+            ),
+            true
+        );
     }
 }
