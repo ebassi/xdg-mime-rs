@@ -24,12 +24,6 @@
 //! The former step does not come with performance penalties, or even requires
 //! the file to exist in the first place; the latter can be an arbitrarily
 //! expensive operation to perform.
-//!
-//! ```
-//! let mime_db = SharedMimeInfo::new();
-//! let mime_types: Vec<String> = mime_db.get_mime_types_from_file_name("file.txt").unwrap();
-//! assert_eq!(mime_types, vec!["text/plain"]);
-//! ```
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -200,6 +194,15 @@ impl SharedMimeInfo {
     ///
     /// If no specific MIME-type can be determined, returns a single
     /// element vector with `application/octet-stream`.
+    ///
+    /// ```rust
+    /// # use std::str::FromStr;
+    /// # use mime::Mime;
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// let mime_types: Vec<Mime> = mime_db.get_mime_types_from_file_name("file.txt");
+    /// assert_eq!(mime_types, vec![Mime::from_str("text/plain").unwrap()]);
+    /// ```
     pub fn get_mime_types_from_file_name(&self, file_name: &str) -> Vec<Mime> {
         match self.globs.lookup_mime_type_for_file_name(file_name) {
             Some(v) => v,
