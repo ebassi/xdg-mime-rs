@@ -13,6 +13,23 @@
 //!
 //! [xdg-mime]: https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html
 //!
+//! ## Loading the Shared MIME database
+//!
+//! The [`SharedMimeInfo`] type will automatically load all the instances of
+//! shared MIME databases available in the following directories, in the
+//! specified order:
+//!
+//!  - `$XDG_DATA_HOME/mime`
+//!    - if `XDG_DATA_HOME` is unset, this corresponds to `$HOME/.local/share/mime`
+//!  - `$XDG_DATA_DIRS/mime`
+//!    - if `XDG_DATA_DIRS` is unset, this corresponds to `/usr/local/share/mime`
+//!      and `/usr/share/mime`
+//!
+//! For more information on the `XDG_DATA_HOME` and `XDG_DATA_DIRS` environment
+//! variables, see the [XDG base directory specification][xdg-basedir].
+//!
+//! [xdg-basedir]: https://specifications.freedesktop.org/basedir-spec/latest/
+//!
 //! ## Retrieving the MIME type of a file
 //!
 //! If you want to know the MIME type of a file, you typically have two
@@ -93,9 +110,9 @@ impl SharedMimeInfo {
     }
 
     /// Creates a new SharedMimeInfo database containing all MIME information
-    /// under the [XDG base directories][xdg-base-dir].
+    /// under the [XDG base directories][xdg-basedir].
     ///
-    /// [xdg-base-dir]: http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
+    /// [xdg-basedir]: http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
     pub fn new() -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
