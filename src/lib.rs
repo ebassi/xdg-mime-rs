@@ -3,15 +3,50 @@
 // FIXME: Remove once we test everything
 #![allow(dead_code)]
 
-/// SharedMimeInfo allows to look up the MIME type associated to a file name
-/// or to the contents of a file, using the [Freedesktop.org Shared MIME
-/// database specification][xdg-mime].
-///
-/// Alongside the MIME type, the Shared MIME database contains other ancillary
-/// information, like the icon associated to the MIME type; the aliases for
-/// a given MIME type; and the various sub-classes of a MIME type.
-///
-/// [xdg-mime]: https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html
+//! SharedMimeInfo allows to look up the MIME type associated to a file name
+//! or to the contents of a file, using the [Freedesktop.org Shared MIME
+//! database specification][xdg-mime].
+//!
+//! Alongside the MIME type, the Shared MIME database contains other ancillary
+//! information, like the icon associated to the MIME type; the aliases for
+//! a given MIME type; and the various sub-classes of a MIME type.
+//!
+//! [xdg-mime]: https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html
+//!
+//! ## Loading the Shared MIME database
+//!
+//! The [`SharedMimeInfo`](struct.SharedMimeInfo.html) type will automatically
+//! load all the instances of shared MIME databases available in the following
+//! directories, in this specified order:
+//!
+//!  - `$XDG_DATA_HOME/mime`
+//!    - if `XDG_DATA_HOME` is unset, this corresponds to `$HOME/.local/share/mime`
+//!  - `$XDG_DATA_DIRS/mime`
+//!    - if `XDG_DATA_DIRS` is unset, this corresponds to `/usr/local/share/mime`
+//!      and `/usr/share/mime`
+//!
+//! For more information on the `XDG_DATA_HOME` and `XDG_DATA_DIRS` environment
+//! variables, see the [XDG base directory specification][xdg-basedir].
+//!
+//! [xdg-basedir]: https://specifications.freedesktop.org/basedir-spec/latest/
+//!
+//! The MIME data in each directory will be coalesced into a single database.
+//!
+//! ## Retrieving the MIME type of a file
+//!
+//! If you want to know the MIME type of a file, you typically have two
+//! options at your disposal:
+//!
+//!  - guess from the file name
+//!  - use an appropriately sized chunk of the file contents and
+//!    perform "content sniffing"
+//!
+//! The former step does not come with performance penalties, or even requires
+//! the file to exist in the first place; the latter can be an arbitrarily
+//! expensive operation to perform. It is recommended to always guess the MIME
+//! type from the file name first, and only use content sniffing lazily and,
+//! possibly, asynchronously.
+
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -27,6 +62,7 @@ mod icon;
 mod magic;
 mod parent;
 
+/// The shared MIME info database
 pub struct SharedMimeInfo {
     aliases: alias::AliasesList,
     parents: parent::ParentsMap,
@@ -78,10 +114,10 @@ impl SharedMimeInfo {
         self.magic.extend(magic_entries);
     }
 
-    /// Creates a new SharedMimeInfo database containing all MIME information
-    /// under the [XDG base directories][xdg-base-dir].
+    /// Creates a new `SharedMimeInfo` instance containing all MIME information
+    /// under the [XDG base directories][xdg-basedir].
     ///
-    /// [xdg-base-dir]: http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
+    /// [xdg-basedir]: http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
     pub fn new() -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
@@ -103,9 +139,10 @@ impl SharedMimeInfo {
         db
     }
 
-    /// Load all the MIME information under @directory, and create a new
+    /// Load all the MIME information under `directory`, and create a new
     /// SharedMimeInfo for it. This method is only really useful for
-    /// testing purposes; you should use SharedMimeInfo::new() instead.
+    /// testing purposes; you should use [`SharedMimeInfo::new()`](#method.new)
+    /// instead.
     pub fn new_for_directory<P: AsRef<Path>>(directory: P) -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
@@ -180,6 +217,21 @@ impl SharedMimeInfo {
     ///
     /// If no specific MIME-type can be determined, returns a single
     /// element vector with `application/octet-stream`.
+    ///
+    /// ```rust
+    /// # use std::error::Error;
+    /// # use std::str::FromStr;
+    /// # use mime::Mime;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// let mime_types: Vec<Mime> = mime_db.get_mime_types_from_file_name("file.txt");
+    /// assert_eq!(mime_types, vec![Mime::from_str("text/plain")?]);
+    /// #
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn get_mime_types_from_file_name(&self, file_name: &str) -> Vec<Mime> {
         match self.globs.lookup_mime_type_for_file_name(file_name) {
             Some(v) => v,
@@ -199,6 +251,22 @@ impl SharedMimeInfo {
 
     /// Checks whether two MIME types are equal, taking into account
     /// eventual aliases.
+    ///
+    /// ```rust
+    /// # use std::error::Error;
+    /// # use std::str::FromStr;
+    /// # use mime::Mime;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// let x_markdown: Mime = "text/x-markdown".parse()?;
+    /// let markdown: Mime = "text/markdown".parse()?;
+    /// assert!(mime_db.mime_type_equal(&x_markdown, &markdown));
+    /// #
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn mime_type_equal(&self, mime_a: &Mime, mime_b: &Mime) -> bool {
         let unaliased_a = self
             .unalias_mime_type(mime_a)
@@ -210,7 +278,23 @@ impl SharedMimeInfo {
         unaliased_a == unaliased_b
     }
 
-    /// Checks whether a MIME type is a subclass of another MIME type
+    /// Checks whether a MIME type is a subclass of another MIME type.
+    ///
+    /// ```rust
+    /// # use std::error::Error;
+    /// # use std::str::FromStr;
+    /// # use mime::Mime;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// let rust: Mime = "text/rust".parse()?;
+    /// let text: Mime = "text/plain".parse()?;
+    /// assert!(mime_db.mime_type_subclass(&rust, &text));
+    /// #
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn mime_type_subclass(&self, mime_type: &Mime, base: &Mime) -> bool {
         let unaliased_mime = self
             .unalias_mime_type(mime_type)

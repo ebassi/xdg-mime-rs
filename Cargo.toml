@@ -14,7 +14,7 @@ license = "MIT"
 [lib]
 name = "xdg_mime"
 path = "src/lib.rs"
-doctest = false
+#doctest = false
 
 [dependencies]
 dirs = "2.0"
