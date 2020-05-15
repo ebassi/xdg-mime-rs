@@ -72,6 +72,10 @@ impl ParentsMap {
     pub fn lookup(&self, mime_type: &Mime) -> Option<&Vec<Mime>> {
         self.parents.get(mime_type)
     }
+
+    pub fn clear(&mut self) {
+        self.parents.clear();
+    }
 }
 
 pub fn read_subclasses_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Subclass> {
