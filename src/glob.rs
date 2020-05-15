@@ -272,6 +272,10 @@ impl GlobMap {
 
         Some(res)
     }
+
+    pub fn clear(&mut self) {
+        self.globs.clear();
+    }
 }
 
 impl fmt::Debug for GlobMap {
