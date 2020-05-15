@@ -262,7 +262,7 @@ named!(magic_entry<MagicEntry>,
     >>  _rules: many1!(complete!(magic_rule))
     >>  (MagicEntry {
             priority: _header.0,
-            mime_type: _header.1.into(),
+            mime_type: _header.1,
             rules: _rules,
         })
     )
