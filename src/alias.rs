@@ -74,6 +74,10 @@ impl AliasesList {
             .find(|a| a.alias == *mime_type)
             .map(|a| a.mime_type.clone())
     }
+
+    pub fn clear(&mut self) {
+        self.aliases.clear();
+    }
 }
 
 pub fn read_aliases_from_file<P: AsRef<Path>>(file_name: P) -> Vec<Alias> {
