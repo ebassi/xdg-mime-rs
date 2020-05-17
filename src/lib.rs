@@ -1,5 +1,5 @@
 #![cfg(any(unix, target_os = "redox"))]
-#![doc(html_root_url = "https://docs.rs/xdg_mime/0.1.1")]
+#![doc(html_root_url = "https://docs.rs/xdg_mime/0.2.0")]
 
 // FIXME: Remove once we test everything
 #![allow(dead_code)]
