@@ -49,8 +49,9 @@
 //! possibly, asynchronously.
 
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
-
+use std::time::{SystemTime};
 use mime::Mime;
 
 extern crate dirs;
@@ -63,6 +64,12 @@ mod icon;
 mod magic;
 mod parent;
 
+#[derive(Clone, PartialEq)]
+struct MimeDirectory {
+    path: PathBuf,
+    mtime: SystemTime,
+}
+
 /// The shared MIME info database
 pub struct SharedMimeInfo {
     aliases: alias::AliasesList,
@@ -71,6 +78,7 @@ pub struct SharedMimeInfo {
     generic_icons: Vec<icon::Icon>,
     globs: glob::GlobMap,
     magic: Vec<magic::MagicEntry>,
+    mime_dirs: Vec<MimeDirectory>,
 }
 
 impl Default for SharedMimeInfo {
@@ -88,6 +96,7 @@ impl SharedMimeInfo {
             generic_icons: Vec::new(),
             globs: glob::GlobMap::new(),
             magic: Vec::new(),
+            mime_dirs: Vec::new(),
         }
     }
 
@@ -113,6 +122,25 @@ impl SharedMimeInfo {
 
         let magic_entries = magic::read_magic_from_dir(&mime_path);
         self.magic.extend(magic_entries);
+
+        let mime_dir = match fs::metadata(&mime_path) {
+            Ok(v) => {
+                let mtime = v.modified().unwrap_or_else(|_| SystemTime::now());
+
+                MimeDirectory {
+                    path: mime_path,
+                    mtime,
+                }
+            },
+            Err(_) => {
+                MimeDirectory {
+                    path: mime_path,
+                    mtime: SystemTime::now(),
+                }
+            }
+        };
+
+        self.mime_dirs.push(mime_dir);
     }
 
     /// Creates a new `SharedMimeInfo` instance containing all MIME information
@@ -150,6 +178,65 @@ impl SharedMimeInfo {
         db.load_directory(directory);
 
         db
+    }
+
+    /// Reloads the contents of the `SharedMimeInfo` type from the directories
+    /// used to populate it at construction time. You should use this method
+    /// if you're planning to keep the database around for long running operations
+    /// or applications.
+    ///
+    /// This method does not do anything if the directories haven't changed
+    /// since the time they were loaded last.
+    ///
+    /// This method will return `true` if the contents of the shared MIME
+    /// database were updated.
+    pub fn reload(&mut self) -> bool {
+        let mut dropped_db = false;
+
+        // Do not reload the data if nothing has changed
+        for dir in &self.mime_dirs {
+            let mtime = match fs::metadata(&dir.path) {
+                Ok(v) => {
+                    v.modified().unwrap_or_else(|_| dir.mtime)
+                },
+                Err(_) => {
+                    dir.mtime
+                }
+            };
+
+            // Drop everything if a directory was changed since
+            // the last time we looked into it
+            if dir.mtime < mtime {
+                dropped_db = true;
+
+                self.aliases.clear();
+                self.parents.clear();
+                self.globs.clear();
+                self.icons.clear();
+                self.generic_icons.clear();
+                self.magic.clear();
+
+                break;
+            }
+        }
+
+        if dropped_db {
+            let mime_dirs: Vec<MimeDirectory> = self.mime_dirs.iter().cloned().collect();
+
+            self.mime_dirs.clear();
+
+            for dir in &mime_dirs {
+                // Pop the `mime` chunk, since load_directory() will
+                // automatically add it back
+                let mut base_dir = PathBuf::new();
+                base_dir.push(&dir.path);
+                base_dir.pop();
+
+                self.load_directory(base_dir);
+            }
+        }
+
+        dropped_db
     }
 
     /// Retrieves the MIME type aliased by a MIME type, if any.
@@ -300,9 +387,7 @@ impl SharedMimeInfo {
         let unaliased_mime = self
             .unalias_mime_type(mime_type)
             .unwrap_or_else(|| mime_type.clone());
-        let unaliased_base = self
-            .unalias_mime_type(base)
-            .unwrap_or_else(|| base.clone());
+        let unaliased_base = self.unalias_mime_type(base).unwrap_or_else(|| base.clone());
 
         if unaliased_mime == unaliased_base {
             return true;
@@ -373,6 +458,15 @@ mod tests {
     #[test]
     fn load_default() {
         let _db: SharedMimeInfo = Default::default();
+    }
+
+    #[test]
+    fn reload() {
+        // We don't load the system data in the, admittedly, remote case the system
+        // is getting updated *while* we run the test suite.
+        let mut _db = load_test_data();
+
+        assert_eq!(_db.reload(), false);
     }
 
     #[test]
