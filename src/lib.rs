@@ -1,6 +1,5 @@
 #![cfg(any(unix, target_os = "redox"))]
 #![doc(html_root_url = "https://docs.rs/xdg_mime/0.2.0")]
-
 // FIXME: Remove once we test everything
 #![allow(dead_code)]
 
@@ -48,11 +47,11 @@
 //! type from the file name first, and only use content sniffing lazily and,
 //! possibly, asynchronously.
 
+use mime::Mime;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime};
-use mime::Mime;
+use std::time::SystemTime;
 
 extern crate dirs;
 #[macro_use]
@@ -131,13 +130,11 @@ impl SharedMimeInfo {
                     path: mime_path,
                     mtime,
                 }
-            },
-            Err(_) => {
-                MimeDirectory {
-                    path: mime_path,
-                    mtime: SystemTime::now(),
-                }
             }
+            Err(_) => MimeDirectory {
+                path: mime_path,
+                mtime: SystemTime::now(),
+            },
         };
 
         self.mime_dirs.push(mime_dir);
@@ -196,12 +193,8 @@ impl SharedMimeInfo {
         // Do not reload the data if nothing has changed
         for dir in &self.mime_dirs {
             let mtime = match fs::metadata(&dir.path) {
-                Ok(v) => {
-                    v.modified().unwrap_or_else(|_| dir.mtime)
-                },
-                Err(_) => {
-                    dir.mtime
-                }
+                Ok(v) => v.modified().unwrap_or_else(|_| dir.mtime),
+                Err(_) => dir.mtime,
             };
 
             // Drop everything if a directory was changed since
@@ -273,9 +266,7 @@ impl SharedMimeInfo {
     pub fn lookup_generic_icon_name(&self, mime_type: &Mime) -> Option<String> {
         let res = match icon::find_icon(&self.generic_icons, mime_type) {
             Some(v) => v,
-            None => {
-                format!("{}-x-generic", mime_type.type_())
-            }
+            None => format!("{}-x-generic", mime_type.type_()),
         };
 
         Some(res)
@@ -491,7 +482,10 @@ mod tests {
             mime_db.unalias_mime_type(&Mime::from_str("application/ics").unwrap()),
             Some(Mime::from_str("text/calendar").unwrap())
         );
-        assert_eq!(mime_db.unalias_mime_type(&Mime::from_str("text/plain").unwrap()), None);
+        assert_eq!(
+            mime_db.unalias_mime_type(&Mime::from_str("text/plain").unwrap()),
+            None
+        );
     }
 
     #[test]

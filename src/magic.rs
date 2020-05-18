@@ -1,16 +1,15 @@
-use nom::IResult;
 use nom::bytes::complete::take_until;
-use nom::character::is_hex_digit;
 use nom::character::complete::line_ending;
+use nom::character::is_hex_digit;
 use nom::combinator::map_res;
-use nom::number::streaming::{be_u16};
+use nom::number::streaming::be_u16;
+use nom::IResult;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
 use std::vec::Vec;
-
 
 use mime::Mime;
 
@@ -45,10 +44,10 @@ impl MagicRule {
         let start: usize = self.start_offset as usize;
         let end: usize = self.start_offset as usize + self.range_length as usize;
 
-        for i in start .. end {
+        for i in start..end {
             let mut res: bool = true;
 
-            let value_len: usize = self.value_length as usize; 
+            let value_len: usize = self.value_length as usize;
 
             if i + value_len > data.len() {
                 return false;
@@ -56,7 +55,7 @@ impl MagicRule {
 
             match &self.mask {
                 Some(m) => {
-                    for j in 0 .. value_len {
+                    for j in 0..value_len {
                         let masked_value = self.value[j] & m[j];
                         let masked_data = data[j + i] & m[j];
                         if masked_value != masked_data {
@@ -64,9 +63,9 @@ impl MagicRule {
                             break;
                         }
                     }
-                },
+                }
                 None => {
-                    for j in 0 .. value_len {
+                    for j in 0..value_len {
                         if data[j + i] != self.value[j] {
                             res = false;
                             break;
@@ -205,14 +204,13 @@ impl MagicEntry {
                             if next.indent < current_level {
                                 current_level -= 1;
                             }
-                        },
+                        }
                         None => {
                             // last rule
                             return Some((&self.mime_type, self.priority));
-                        },
+                        }
                     };
-                }
-                else {
+                } else {
                     // No match at the current level, start from scratch
                     current_level = 0;
                 }
@@ -279,7 +277,7 @@ named!(from_u8_to_entries<Vec<MagicEntry>>,
 pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
     for entry in entries {
         if let Some(v) = entry.matches(data) {
-            return Some((v.0.clone(), v.1))
+            return Some((v.0.clone(), v.1));
         }
     }
 
@@ -311,9 +309,9 @@ pub fn read_magic_from_dir<P: AsRef<Path>>(dir: P) -> Vec<MagicEntry> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use nom::HexDisplay;
     use nom::Offset;
-    use super::*;
 
     #[test]
     fn parse_magic_header() {
@@ -323,7 +321,7 @@ mod tests {
             Ok((i, o)) => {
                 assert_eq!(i.len(), 0);
                 println!("parsed:\n{:?}", o);
-            },
+            }
             e => {
                 println!("invalid or incomplete: {:?}", e);
                 panic!("cannot parse magic rule");
@@ -341,7 +339,7 @@ mod tests {
             Ok((i, o)) => {
                 println!("remaining:\n{}", &i.to_hex_from(8, simple.offset(i)));
                 println!("parsed:\n{:?}", o);
-            },
+            }
             e => {
                 println!("invalid or incomplete: {:?}", e);
                 panic!("cannot parse magic rule");
@@ -356,7 +354,7 @@ mod tests {
             Ok((i, o)) => {
                 println!("remaining:\n{}", &i.to_hex_from(8, range.offset(i)));
                 println!("parsed:\n{:?}", o);
-            },
+            }
             e => {
                 println!("invalid or incomplete: {:?}", e);
                 panic!("cannot parse magic rule");
@@ -371,7 +369,7 @@ mod tests {
             Ok((i, o)) => {
                 println!("remaining:\n{}", &i.to_hex_from(8, ws.offset(i)));
                 println!("parsed:\n{:?}", o);
-            },
+            }
             e => {
                 println!("invalid or incomplete: {:?}", e);
                 panic!("cannot parse magic rule");
@@ -389,7 +387,7 @@ mod tests {
             Ok((i, o)) => {
                 println!("remaining:\n{}", &i.to_hex_from(8, data.offset(i)));
                 println!("parsed:\n{:?}", o);
-            },
+            }
             e => {
                 println!("invalid or incomplete: {:?}", e);
                 panic!("cannot parse magic entry");
@@ -407,7 +405,7 @@ mod tests {
             Ok((i, o)) => {
                 println!("remaining:\n{}", &i.to_hex_from(8, data.offset(i)));
                 println!("parsed:\n{:?}", o);
-            },
+            }
             e => {
                 println!("invalid or incomplete: {:?}", e);
                 panic!("cannot parse magic entry");
@@ -424,7 +422,7 @@ mod tests {
             Ok((i, o)) => {
                 println!("remaining:\n{}", &i.to_hex_from(8, data.offset(i)));
                 println!("parsed {} magic entries:\n{:#?}", o.len(), o);
-            },
+            }
             e => {
                 println!("invalid or incomplete: {:?}", e);
                 panic!("cannot parse magic file");

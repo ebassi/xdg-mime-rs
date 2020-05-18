@@ -123,15 +123,14 @@ mod tests {
 
     #[test]
     fn new_alias() {
-        assert!(
-            Alias::new(
-                &Mime::from_str("application/foo").unwrap(),
-                &Mime::from_str("application/foo").unwrap()
-            ).is_equivalent(&Alias::new(
-                &Mime::from_str("application/foo").unwrap(),
-                &Mime::from_str("application/x-foo").unwrap()
-            )),
-        );
+        assert!(Alias::new(
+            &Mime::from_str("application/foo").unwrap(),
+            &Mime::from_str("application/foo").unwrap()
+        )
+        .is_equivalent(&Alias::new(
+            &Mime::from_str("application/foo").unwrap(),
+            &Mime::from_str("application/x-foo").unwrap()
+        )),);
     }
 
     #[test]
