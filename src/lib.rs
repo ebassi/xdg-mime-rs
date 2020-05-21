@@ -37,15 +37,32 @@
 //! If you want to know the MIME type of a file, you typically have two
 //! options at your disposal:
 //!
-//!  - guess from the file name
+//!  - guess from the file name, using the [`get_mime_types_from_file_name`]
+//!    method
 //!  - use an appropriately sized chunk of the file contents and
-//!    perform "content sniffing"
+//!    perform "content sniffing", using the [`get_mime_type_for_data`] method
 //!
 //! The former step does not come with performance penalties, or even requires
-//! the file to exist in the first place; the latter can be an arbitrarily
-//! expensive operation to perform. It is recommended to always guess the MIME
-//! type from the file name first, and only use content sniffing lazily and,
+//! the file to exist in the first place, but it may return a list of potential
+//! matches; the latter can be an arbitrarily expensive operation to perform,
+//! but its result is going to be certain. It is recommended to always guess the
+//! MIME type from the file name first, and only use content sniffing lazily and,
 //! possibly, asynchronously.
+//!
+//! [`get_mime_types_from_file_name`]: struct.SharedMimeInfo.html#method.get_mime_types_from_file_name
+//! [`get_mime_type_for_data`]: struct.SharedMimeInfo.html#method.get_mime_type_for_data
+//!
+//! ## Guessing the MIME type
+//!
+//! If you have access to a file name or its contents, it's possible to use
+//! the [`guess_mime_type`] method to create a [`GuessBuilder`] instance, and
+//! populate it with the file name, its contents, or the full path to the file;
+//! then, call the [`guess`] method to guess the MIME type depending on the
+//! available information.
+//!
+//! [`GuessBuilder`]: struct.GuessBuilder.html
+//! [`guess_mime_type`]: struct.SharedMimeInfo.html#method.guess_mime_type
+//! [`guess`]: struct.GuessBuilder.html#method.guess
 
 use mime::Mime;
 use std::env;
@@ -78,6 +95,192 @@ pub struct SharedMimeInfo {
     globs: glob::GlobMap,
     magic: Vec<magic::MagicEntry>,
     mime_dirs: Vec<MimeDirectory>,
+}
+
+/// A builder type to specify the parameters for guessing a MIME type.
+///
+/// Each instance of `GuessBuilder` is tied to the lifetime of the
+/// [`SharedMimeInfo`] instance that created it.
+///
+/// The `GuessBuilder` returned by the [`guess_mime_type`] method is
+/// empty, and will always return a `mime::APPLICATION_OCTET_STREAM`
+/// guess.
+///
+/// You can use the builder methods to specify the file name, the data,
+/// or both, to be used to guess the MIME type:
+///
+/// ```rust
+/// # use std::error::Error;
+/// # use std::str::FromStr;
+/// # use mime::Mime;
+/// #
+/// # fn main() -> Result<(), Box<dyn Error>> {
+/// # let mime_db = xdg_mime::SharedMimeInfo::new();
+/// // let mime_db = ...
+/// let mut guess_builder = mime_db.guess_mime_type();
+/// let guess = guess_builder.file_name("foo.png").guess();
+/// assert_eq!(guess.mime_type(), Mime::from_str("image/png")?);
+/// #
+/// # Ok(())
+/// # }
+/// ```
+///
+/// The guessed MIME type can have a degree of uncertainty; for instance,
+/// if you only set the [`file_name`] there can be multiple matching MIME
+/// types to choose from. Alternatively, if you only set the [`data`], the
+/// content might not match any existing rule. Even in the case of setting
+/// both the file name and the data the match can be uncertain. This
+/// information is preserved by the [`Guess`] type, and can be retrieved
+/// using the [`uncertain`] method.
+///
+/// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
+/// [`guess_mime_type`]: struct.SharedMimeInfo.html#method.guess_mime_type
+/// [`file_name`]: #method.file_name
+/// [`data`]: #method.data
+/// [`uncertain`]: struct.Guess.html#method.uncertain
+pub struct GuessBuilder<'a> {
+    db: &'a SharedMimeInfo,
+    file_name: Option<String>,
+    data: Option<Vec<u8>>,
+}
+
+/// The result of the [`guess`] method of [`GuessBuilder`].
+///
+/// [`guess`]: struct.GuessBuilder.html#method.guess
+/// [`GuessBuilder`]: struct.GuessBuilder.html
+pub struct Guess {
+    mime: mime::Mime,
+    uncertain: bool,
+}
+
+impl<'a> GuessBuilder<'a> {
+    /// Sets the file name to be used to guess its MIME type.
+    ///
+    /// If you have a full path, you should extract the last component,
+    /// for instance using the [`Path::file_name()`][path_file_name]
+    /// method.
+    ///
+    /// [path_file_name]: https://doc.rust-lang.org/std/path/struct.Path.html#method.file_name
+    pub fn file_name(&mut self, name: &str) -> &mut Self {
+        self.file_name = Some(name.to_string());
+
+        self
+    }
+
+    /// Sets the data for which you want to guess the MIME type.
+    pub fn data(&mut self, data: &[u8]) -> &mut Self {
+        let mut buf = Vec::new();
+
+        // If we have enough data, just copy the largest chunk
+        // necessary to match any rule in the magic entries
+        let max_data_size = magic::max_extents(&self.db.magic);
+        if data.len() > max_data_size {
+            buf.copy_from_slice(&data[..max_data_size]);
+        } else {
+            buf.extend(data.iter().cloned());
+        }
+
+        self.data = Some(buf);
+
+        self
+    }
+
+    /// Guesses the MIME type using the data set on the builder. The result is
+    /// a [`Guess`] instance that contains both the guessed MIME type, and whether
+    /// the result of the guess is certain.
+    ///
+    /// [`Guess`]: struct.Guess.html
+    pub fn guess(&mut self) -> Guess {
+        let name_mime_types: Vec<mime::Mime> = match &self.file_name {
+            Some(file_name) => self.db.get_mime_types_from_file_name(&file_name),
+            None => Vec::new(),
+        };
+
+        // File name match, and no conflicts
+        if name_mime_types.len() == 1 {
+            return Guess {
+                mime: name_mime_types.get(0).unwrap().clone(),
+                uncertain: false,
+            };
+        }
+
+        let sniffed_mime: (mime::Mime, u32) = match &self.data {
+            Some(data) => self
+                .db
+                .get_mime_type_for_data(data)
+                .unwrap_or_else(|| (mime::APPLICATION_OCTET_STREAM, 80)),
+            None => (mime::APPLICATION_OCTET_STREAM, 80),
+        };
+
+        if name_mime_types.is_empty() {
+            return Guess {
+                mime: sniffed_mime.0.clone(),
+                uncertain: sniffed_mime.0 == mime::APPLICATION_OCTET_STREAM,
+            };
+        } else {
+            let (mime, priority) = sniffed_mime;
+
+            if mime != mime::APPLICATION_OCTET_STREAM {
+                // We found a match with a high confidence value
+                if priority > 80 {
+                    return Guess {
+                        mime,
+                        uncertain: false,
+                    };
+                }
+
+                // We have possible conflicts, but the data matches the
+                // file name, so let's see if the sniffed MIME type is
+                // a subclass of the MIME type associated to the file name,
+                // and use that as a tie breaker
+                for mime_type in &name_mime_types {
+                    if self.db.mime_type_subclass(&mime_type, &mime) {
+                        return Guess {
+                            mime: mime_type.clone(),
+                            uncertain: false,
+                        };
+                    }
+                }
+            }
+
+            // If there are conflicts, and the data does not help us,
+            // we just pick the first result
+            if let Some(mime_type) = name_mime_types.get(0) {
+                return Guess {
+                    mime: mime_type.clone(),
+                    uncertain: true,
+                };
+            }
+        }
+
+        Guess {
+            mime: mime::APPLICATION_OCTET_STREAM,
+            uncertain: true,
+        }
+    }
+}
+
+impl Guess {
+    /// The guessed MIME type.
+    pub fn mime_type(&self) -> mime::Mime {
+        self.mime.clone()
+    }
+
+    /// Whether the guessed MIME type is uncertain.
+    ///
+    /// If the MIME type was guessed only from its file name there can be
+    /// multiple matches, but the [`mime_type`] method will return just the
+    /// first match.
+    ///
+    /// If you only have a file name, and you want to gather all potential
+    /// matches, you should use the [`get_mime_types_from_file_name`] method
+    /// instead of performing a guess.
+    ///
+    /// [`mime_type`]: #method.mime_type
+    /// [`get_mime_types_from_file_name`]: struct.SharedMimeInfo.html#method.get_mime_types_from_file_name
+    pub fn uncertain(&self) -> bool {
+        self.uncertain
+    }
 }
 
 impl Default for SharedMimeInfo {
@@ -141,7 +344,7 @@ impl SharedMimeInfo {
     }
 
     /// Creates a new `SharedMimeInfo` instance containing all MIME information
-    /// under the [XDG base directories][xdg-basedir].
+    /// under the [standard XDG base directories][xdg-basedir].
     ///
     /// [xdg-basedir]: http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
     pub fn new() -> SharedMimeInfo {
@@ -165,10 +368,14 @@ impl SharedMimeInfo {
         db
     }
 
-    /// Load all the MIME information under `directory`, and create a new
-    /// SharedMimeInfo for it. This method is only really useful for
-    /// testing purposes; you should use [`SharedMimeInfo::new()`](#method.new)
-    /// instead.
+    /// Loads all the MIME information under `directory`, and creates a new
+    /// [`SharedMimeInfo`] instance for it.
+    ///
+    /// This method is only really useful for testing purposes; you should
+    /// always use the [`new`] method, instead.
+    ///
+    /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
+    /// [`new`]: #method.new
     pub fn new_for_directory<P: AsRef<Path>>(directory: P) -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
@@ -177,7 +384,7 @@ impl SharedMimeInfo {
         db
     }
 
-    /// Reloads the contents of the `SharedMimeInfo` type from the directories
+    /// Reloads the contents of the [`SharedMimeInfo`] type from the directories
     /// used to populate it at construction time. You should use this method
     /// if you're planning to keep the database around for long running operations
     /// or applications.
@@ -187,6 +394,8 @@ impl SharedMimeInfo {
     ///
     /// This method will return `true` if the contents of the shared MIME
     /// database were updated.
+    ///
+    /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
     pub fn reload(&mut self) -> bool {
         let mut dropped_db = false;
 
@@ -239,7 +448,9 @@ impl SharedMimeInfo {
 
     /// Looks up the icons associated to a MIME type.
     ///
-    /// The icons can be looked up within the current icon theme.
+    /// The icons can be looked up within the current [icon theme][xdg-icon-theme].
+    ///
+    /// [xdg-icon-theme]: https://specifications.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html
     pub fn lookup_icon_names(&self, mime_type: &Mime) -> Vec<String> {
         let mut res = Vec::new();
 
@@ -262,7 +473,9 @@ impl SharedMimeInfo {
 
     /// Looks up the generic icon associated to a MIME type.
     ///
-    /// The icon can be looked up within the current icon theme.
+    /// The icon can be looked up within the current [icon theme][xdg-icon-theme].
+    ///
+    /// [xdg-icon-theme]: https://specifications.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html
     pub fn lookup_generic_icon_name(&self, mime_type: &Mime) -> Option<String> {
         let res = match icon::find_icon(&self.generic_icons, mime_type) {
             Some(v) => v,
@@ -272,7 +485,7 @@ impl SharedMimeInfo {
         Some(res)
     }
 
-    /// Looks up all the parent MIME types associated to @mime_type
+    /// Retrieves all the parent MIME types associated to `mime_type`.
     pub fn get_parents(&self, mime_type: &Mime) -> Option<Vec<Mime>> {
         let unaliased = match self.aliases.unalias_mime_type(mime_type) {
             Some(v) => v,
@@ -295,7 +508,7 @@ impl SharedMimeInfo {
     /// without looking at the data inside the file.
     ///
     /// If no specific MIME-type can be determined, returns a single
-    /// element vector with `application/octet-stream`.
+    /// element vector containing the `application/octet-stream` MIME type.
     ///
     /// ```rust
     /// # use std::error::Error;
@@ -419,6 +632,35 @@ impl SharedMimeInfo {
         }
 
         false
+    }
+
+    /// Creates a new [`GuessBuilder`] that can be used to guess the MIME type
+    /// of a file name, its contents, or a path.
+    ///
+    /// ```rust
+    /// # use std::error::Error;
+    /// # use std::str::FromStr;
+    /// # use mime::Mime;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// let mut gb = mime_db.guess_mime_type();
+    /// let guess = gb.file_name("foo.txt").guess();
+    /// assert_eq!(guess.mime_type(), mime::TEXT_PLAIN);
+    /// assert_eq!(guess.uncertain(), false);
+    /// #
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`GuessBuilder`]: struct.GuessBuilder.html
+    pub fn guess_mime_type(&self) -> GuessBuilder {
+        GuessBuilder {
+            db: &self,
+            file_name: None,
+            data: None,
+        }
     }
 }
 
@@ -656,5 +898,44 @@ mod tests {
             ),
             true
         );
+    }
+
+    #[test]
+    fn guess_none() {
+        let mime_db = load_test_data();
+
+        let mut gb = mime_db.guess_mime_type();
+        let guess = gb.guess();
+        assert_eq!(guess.mime_type(), mime::APPLICATION_OCTET_STREAM);
+        assert_eq!(guess.uncertain(), true);
+    }
+
+    #[test]
+    fn guess_filename() {
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let guess = gb.file_name("foo.txt").guess();
+        assert_eq!(guess.mime_type(), mime::TEXT_PLAIN);
+        assert_eq!(guess.uncertain(), false);
+    }
+
+    #[test]
+    fn guess_data() {
+        let svg_data = include_bytes!("../test_files/files/rust-logo.svg");
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let guess = gb.data(svg_data).guess();
+        assert_eq!(guess.mime_type(), Mime::from_str("image/svg+xml").unwrap());
+        assert_eq!(guess.uncertain(), false);
+    }
+
+    #[test]
+    fn guess_both() {
+        let png_data = include_bytes!("../test_files/files/rust-logo.png");
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let guess = gb.file_name("rust-logo.png").data(png_data).guess();
+        assert_eq!(guess.mime_type(), Mime::from_str("image/png").unwrap());
+        assert_eq!(guess.uncertain(), false);
     }
 }

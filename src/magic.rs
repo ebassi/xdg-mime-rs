@@ -81,6 +81,14 @@ impl MagicRule {
 
         false
     }
+
+    fn extent(&self) -> usize {
+        let value_len = self.value_length as usize;
+        let offset = self.start_offset as usize;
+        let range_len = self.range_length as usize;
+
+        value_len + offset + range_len
+    }
 }
 
 // Indentation level, can be 0
@@ -219,6 +227,18 @@ impl MagicEntry {
 
         None
     }
+
+    fn max_extents(&self) -> usize {
+        let mut res: usize = 0;
+        for rule in &self.rules {
+            let rule_extent = rule.extent();
+            if rule_extent > res {
+                res = rule_extent;
+            }
+        }
+
+        res
+    }
 }
 
 named!(priority<u32>,
@@ -282,6 +302,18 @@ pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
     }
 
     None
+}
+
+pub fn max_extents(entries: &[MagicEntry]) -> usize {
+    let mut res: usize = 0;
+    for entry in entries {
+        let extents = entry.max_extents();
+        if extents > res {
+            res = extents;
+        }
+    }
+
+    res
 }
 
 pub fn read_magic_from_file<P: AsRef<Path>>(file_name: P) -> Vec<MagicEntry> {
