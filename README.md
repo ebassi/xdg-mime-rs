@@ -13,7 +13,7 @@ library, with some added functionality that typically resides in higher
 level components, like determining the appropriate icon name for a file
 from the [icon theme][fdo-icon-theme].
 
-[Dumentation][docs].
+[Documentation][docs].
 
 Installation
 ------------
