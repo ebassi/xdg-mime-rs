@@ -14,7 +14,6 @@ exclude = [".github/*", ".gitignore"]
 [lib]
 name = "xdg_mime"
 path = "src/lib.rs"
-#doctest = false
 
 [dependencies]
 dirs = "2.0"
