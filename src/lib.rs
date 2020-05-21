@@ -102,7 +102,42 @@ pub struct SharedMimeInfo {
 /// Each instance of `GuessBuilder` is tied to the lifetime of the
 /// [`SharedMimeInfo`] instance that created it.
 ///
+/// The `GuessBuilder` returned by the [`guess_mime_type`] method is
+/// empty, and will always return a `mime::APPLICATION_OCTET_STREAM`
+/// guess.
+///
+/// You can use the builder methods to specify the file name, the data,
+/// or both, to be used to guess the MIME type:
+///
+/// ```rust
+/// # use std::error::Error;
+/// # use std::str::FromStr;
+/// # use mime::Mime;
+/// #
+/// # fn main() -> Result<(), Box<dyn Error>> {
+/// # let mime_db = xdg_mime::SharedMimeInfo::new();
+/// // let mime_db = ...
+/// let mut guess_builder = mime_db.guess_mime_type();
+/// let guess = guess_builder.file_name("foo.png").guess();
+/// assert_eq!(guess.mime_type(), Mime::from_str("image/png")?);
+/// #
+/// # Ok(())
+/// # }
+/// ```
+///
+/// The guessed MIME type can have a degree of uncertainty; for instance,
+/// if you only set the [`file_name`] there can be multiple matching MIME
+/// types to choose from. Alternatively, if you only set the [`data`], the
+/// content might not match any existing rule. Even in the case of setting
+/// both the file name and the data the match can be uncertain. This
+/// information is preserved by the [`Guess`] type, and can be retrieved
+/// using the [`uncertain`] method.
+///
 /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
+/// [`guess_mime_type`]: struct.SharedMimeInfo.html#method.guess_mime_type
+/// [`file_name`]: #method.file_name
+/// [`data`]: #method.data
+/// [`uncertain`]: struct.Guess.html#method.uncertain
 pub struct GuessBuilder<'a> {
     db: &'a SharedMimeInfo,
     file_name: Option<String>,
@@ -413,7 +448,9 @@ impl SharedMimeInfo {
 
     /// Looks up the icons associated to a MIME type.
     ///
-    /// The icons can be looked up within the current icon theme.
+    /// The icons can be looked up within the current [icon theme][xdg-icon-theme].
+    ///
+    /// [xdg-icon-theme]: https://specifications.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html
     pub fn lookup_icon_names(&self, mime_type: &Mime) -> Vec<String> {
         let mut res = Vec::new();
 
@@ -436,7 +473,9 @@ impl SharedMimeInfo {
 
     /// Looks up the generic icon associated to a MIME type.
     ///
-    /// The icon can be looked up within the current icon theme.
+    /// The icon can be looked up within the current [icon theme][xdg-icon-theme].
+    ///
+    /// [xdg-icon-theme]: https://specifications.freedesktop.org/icon-theme-spec/icon-theme-spec-latest.html
     pub fn lookup_generic_icon_name(&self, mime_type: &Mime) -> Option<String> {
         let res = match icon::find_icon(&self.generic_icons, mime_type) {
             Some(v) => v,
@@ -446,7 +485,7 @@ impl SharedMimeInfo {
         Some(res)
     }
 
-    /// Looks up all the parent MIME types associated to @mime_type
+    /// Retrieves all the parent MIME types associated to `mime_type`.
     pub fn get_parents(&self, mime_type: &Mime) -> Option<Vec<Mime>> {
         let unaliased = match self.aliases.unalias_mime_type(mime_type) {
             Some(v) => v,
@@ -469,7 +508,7 @@ impl SharedMimeInfo {
     /// without looking at the data inside the file.
     ///
     /// If no specific MIME-type can be determined, returns a single
-    /// element vector with `application/octet-stream`.
+    /// element vector containing the `application/octet-stream` MIME type.
     ///
     /// ```rust
     /// # use std::error::Error;
