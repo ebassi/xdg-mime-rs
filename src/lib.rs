@@ -60,6 +60,7 @@
 //! then, call the [`guess`] method to guess the MIME type depending on the
 //! available information.
 //!
+//! [`GuessBuilder`]: struct.GuessBuilder.html
 //! [`guess_mime_type`]: struct.SharedMimeInfo.html#method.guess_mime_type
 //! [`guess`]: struct.GuessBuilder.html#method.guess
 
@@ -97,13 +98,21 @@ pub struct SharedMimeInfo {
 }
 
 /// A builder type to specify the parameters for guessing a MIME type.
+///
+/// Each instance of `GuessBuilder` is tied to the lifetime of the
+/// [`SharedMimeInfo`] instance that created it.
+///
+/// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
 pub struct GuessBuilder<'a> {
     db: &'a SharedMimeInfo,
     file_name: Option<String>,
     data: Option<Vec<u8>>,
 }
 
-/// The result of a MIME type guess.
+/// The result of the [`guess`] method of [`GuessBuilder`].
+///
+/// [`guess`]: struct.GuessBuilder.html#method.guess
+/// [`GuessBuilder`]: struct.GuessBuilder.html
 pub struct Guess {
     mime: mime::Mime,
     uncertain: bool,
@@ -144,6 +153,8 @@ impl<'a> GuessBuilder<'a> {
     /// Guesses the MIME type using the data set on the builder. The result is
     /// a [`Guess`] instance that contains both the guessed MIME type, and whether
     /// the result of the guess is certain.
+    ///
+    /// [`Guess`]: struct.Guess.html
     pub fn guess(&mut self) -> Guess {
         let name_mime_types: Vec<mime::Mime> = match &self.file_name {
             Some(file_name) => self.db.get_mime_types_from_file_name(&file_name),
@@ -298,7 +309,7 @@ impl SharedMimeInfo {
     }
 
     /// Creates a new `SharedMimeInfo` instance containing all MIME information
-    /// under the [XDG base directories][xdg-basedir].
+    /// under the [standard XDG base directories][xdg-basedir].
     ///
     /// [xdg-basedir]: http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
     pub fn new() -> SharedMimeInfo {
@@ -323,9 +334,13 @@ impl SharedMimeInfo {
     }
 
     /// Loads all the MIME information under `directory`, and creates a new
-    /// SharedMimeInfo for it. This method is only really useful for
-    /// testing purposes; you should use [`SharedMimeInfo::new()`](#method.new)
-    /// instead.
+    /// [`SharedMimeInfo`] instance for it.
+    ///
+    /// This method is only really useful for testing purposes; you should
+    /// always use the [`new`] method, instead.
+    ///
+    /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
+    /// [`new`]: #method.new
     pub fn new_for_directory<P: AsRef<Path>>(directory: P) -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
@@ -334,7 +349,7 @@ impl SharedMimeInfo {
         db
     }
 
-    /// Reloads the contents of the `SharedMimeInfo` type from the directories
+    /// Reloads the contents of the [`SharedMimeInfo`] type from the directories
     /// used to populate it at construction time. You should use this method
     /// if you're planning to keep the database around for long running operations
     /// or applications.
@@ -344,6 +359,8 @@ impl SharedMimeInfo {
     ///
     /// This method will return `true` if the contents of the shared MIME
     /// database were updated.
+    ///
+    /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
     pub fn reload(&mut self) -> bool {
         let mut dropped_db = false;
 
