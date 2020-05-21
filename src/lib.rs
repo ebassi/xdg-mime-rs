@@ -423,7 +423,7 @@ impl SharedMimeInfo {
         }
 
         if dropped_db {
-            let mime_dirs: Vec<MimeDirectory> = self.mime_dirs.iter().cloned().collect();
+            let mime_dirs: Vec<MimeDirectory> = self.mime_dirs.to_vec();
 
             self.mime_dirs.clear();
 
