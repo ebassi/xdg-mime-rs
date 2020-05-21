@@ -39,7 +39,7 @@ impl Icon {
 
         Some(Icon {
             icon_name: icon_name.to_string(),
-            mime_type
+            mime_type,
         })
     }
 }

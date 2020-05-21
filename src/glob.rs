@@ -272,6 +272,10 @@ impl GlobMap {
 
         Some(res)
     }
+
+    pub fn clear(&mut self) {
+        self.globs.clear();
+    }
 }
 
 impl fmt::Debug for GlobMap {
@@ -326,7 +330,12 @@ mod tests {
         );
         assert_eq!(
             Glob::from_v1_string("text/rust:*.rs"),
-            Some(Glob::new(&Mime::from_str("text/rust").unwrap(), "*.rs", 50, false))
+            Some(Glob::new(
+                &Mime::from_str("text/rust").unwrap(),
+                "*.rs",
+                50,
+                false
+            ))
         );
 
         assert_eq!(Glob::from_v1_string(""), None);
@@ -341,15 +350,29 @@ mod tests {
     fn glob_v2_string() {
         assert_eq!(
             Glob::from_v2_string("80:text/rust:*.rs"),
-            Some(Glob::with_weight(&Mime::from_str("text/rust").unwrap(), "*.rs", 80))
+            Some(Glob::with_weight(
+                &Mime::from_str("text/rust").unwrap(),
+                "*.rs",
+                80
+            ))
         );
         assert_eq!(
             Glob::from_v2_string("80:text/rust:*.rs"),
-            Some(Glob::new(&Mime::from_str("text/rust").unwrap(), "*.rs", 80, false))
+            Some(Glob::new(
+                &Mime::from_str("text/rust").unwrap(),
+                "*.rs",
+                80,
+                false
+            ))
         );
         assert_eq!(
             Glob::from_v2_string("50:text/x-c++src:*.C:cs"),
-            Some(Glob::new(&Mime::from_str("text/x-c++src").unwrap(), "*.C", 50, true))
+            Some(Glob::new(
+                &Mime::from_str("text/x-c++src").unwrap(),
+                "*.C",
+                50,
+                true
+            ))
         );
 
         assert_eq!(Glob::from_v2_string(""), None);
@@ -362,14 +385,24 @@ mod tests {
 
         assert_eq!(
             Glob::from_v2_string("50:text/x-c++src:*.C:cs,newflag:newfeature:somethingelse"),
-            Some(Glob::new(&Mime::from_str("text/x-c++src").unwrap(), "*.C", 50, true))
+            Some(Glob::new(
+                &Mime::from_str("text/x-c++src").unwrap(),
+                "*.C",
+                50,
+                true
+            ))
         );
     }
 
     #[test]
     fn compare() {
         // Literal
-        let copying = Glob::new(&Mime::from_str("text/x-copying").unwrap(), "copying", 50, false);
+        let copying = Glob::new(
+            &Mime::from_str("text/x-copying").unwrap(),
+            "copying",
+            50,
+            false,
+        );
         assert_eq!(copying.compare(&"COPYING".to_string()), true);
 
         // Simple, case-insensitive
@@ -384,7 +417,12 @@ mod tests {
         assert_eq!(cplusplus_src.compare(&"foo.h".to_string()), false);
 
         // Full
-        let video_x_anim = Glob::new(&Mime::from_str("video/x-anim").unwrap(), "*.anim[1-9j]", 50, false);
+        let video_x_anim = Glob::new(
+            &Mime::from_str("video/x-anim").unwrap(),
+            "*.anim[1-9j]",
+            50,
+            false,
+        );
         assert_eq!(video_x_anim.compare(&"foo.anim0".to_string()), false);
         assert_eq!(video_x_anim.compare(&"foo.anim8".to_string()), true);
         assert_eq!(video_x_anim.compare(&"foo.animk".to_string()), false);

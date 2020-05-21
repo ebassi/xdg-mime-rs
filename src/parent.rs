@@ -32,7 +32,10 @@ impl Subclass {
             return None;
         }
 
-        Some(Subclass { mime_type, parent_type })
+        Some(Subclass {
+            mime_type,
+            parent_type,
+        })
     }
 }
 
@@ -71,6 +74,10 @@ impl ParentsMap {
 
     pub fn lookup(&self, mime_type: &Mime) -> Option<&Vec<Mime>> {
         self.parents.get(mime_type)
+    }
+
+    pub fn clear(&mut self) {
+        self.parents.clear();
     }
 }
 
