@@ -66,8 +66,8 @@
 
 use mime::Mime;
 use std::env;
-use std::fs::File;
 use std::fs;
+use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -143,7 +143,7 @@ pub struct SharedMimeInfo {
 pub struct GuessBuilder<'a> {
     db: &'a SharedMimeInfo,
     file_name: Option<String>,
-    data: Option<Vec<u8>>,
+    data: Vec<u8>,
     metadata: Option<fs::Metadata>,
     path: Option<PathBuf>,
 }
@@ -173,18 +173,14 @@ impl<'a> GuessBuilder<'a> {
 
     /// Sets the data for which you want to guess the MIME type.
     pub fn data(&mut self, data: &[u8]) -> &mut Self {
-        let mut buf = Vec::new();
-
         // If we have enough data, just copy the largest chunk
         // necessary to match any rule in the magic entries
         let max_data_size = magic::max_extents(&self.db.magic);
         if data.len() > max_data_size {
-            buf.copy_from_slice(&data[..max_data_size]);
+            self.data.extend_from_slice(&data[..max_data_size]);
         } else {
-            buf.extend(data.iter().cloned());
+            self.data.extend(data.iter().cloned());
         }
-
-        self.data = Some(buf);
 
         self
     }
@@ -269,7 +265,7 @@ impl<'a> GuessBuilder<'a> {
             if self.metadata.is_none() {
                 self.metadata = match fs::metadata(&path) {
                     Ok(m) => Some(m),
-                    Err(_) => None
+                    Err(_) => None,
                 };
             }
 
@@ -280,7 +276,7 @@ impl<'a> GuessBuilder<'a> {
 
                 let mut f = match File::open(&path) {
                     Ok(file) => file,
-                    Err(_) => return None
+                    Err(_) => return None,
                 };
 
                 let mut buf = Vec::with_capacity(chunk_size);
@@ -293,7 +289,7 @@ impl<'a> GuessBuilder<'a> {
             }
 
             // Load the minimum amount of data necessary for a match
-            if self.data.is_none() {
+            if self.data.is_empty() {
                 let mut max_data_size = magic::max_extents(&self.db.magic);
 
                 if let Some(metadata) = &self.metadata {
@@ -303,7 +299,10 @@ impl<'a> GuessBuilder<'a> {
                     }
                 }
 
-                self.data = load_data_chunk(&path, max_data_size);
+                match load_data_chunk(&path, max_data_size) {
+                    Some(v) => self.data.extend(v),
+                    None => self.data.clear(),
+                }
             }
 
             // Set the file name
@@ -311,7 +310,7 @@ impl<'a> GuessBuilder<'a> {
                 if let Some(file_name) = path.file_name() {
                     self.file_name = match file_name.to_os_string().into_string() {
                         Ok(v) => Some(v),
-                        Err(_) => None
+                        Err(_) => None,
                     };
                 }
             }
@@ -346,15 +345,20 @@ impl<'a> GuessBuilder<'a> {
             };
         }
 
-        let sniffed_mime: (mime::Mime, u32) = match &self.data {
-            Some(data) => self
-                .db
-                .get_mime_type_for_data(data)
-                .unwrap_or_else(|| (mime::APPLICATION_OCTET_STREAM, 80)),
-            None => (mime::APPLICATION_OCTET_STREAM, 80),
-        };
+        let sniffed_mime = self
+            .db
+            .get_mime_type_for_data(&self.data)
+            .unwrap_or_else(|| (mime::APPLICATION_OCTET_STREAM, 80));
 
         if name_mime_types.is_empty() {
+            // No names and no data => unknown MIME type
+            if self.data.is_empty() {
+                return Guess {
+                    mime: mime::APPLICATION_OCTET_STREAM,
+                    uncertain: true,
+                };
+            }
+
             return Guess {
                 mime: sniffed_mime.0.clone(),
                 uncertain: sniffed_mime.0 == mime::APPLICATION_OCTET_STREAM,
@@ -806,7 +810,7 @@ impl SharedMimeInfo {
         GuessBuilder {
             db: &self,
             file_name: None,
-            data: None,
+            data: Vec::new(),
             metadata: None,
             path: None,
         }
