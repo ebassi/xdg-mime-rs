@@ -207,15 +207,15 @@ impl<'a> GuessBuilder<'a> {
     /// let mut guess_builder = mime_db.guess_mime_type();
     /// let guess = guess_builder
     ///     .file_name("lib.rs")
-    ///     .metadata(&metadata)
+    ///     .metadata(metadata)
     ///     .guess();
     /// assert_eq!(guess.mime_type(), Mime::from_str("text/rust")?);
     /// #
     /// # Ok(())
     /// # }
     /// ```
-    pub fn metadata(&mut self, metadata: &fs::Metadata) -> &mut Self {
-        self.metadata = Some(metadata.clone());
+    pub fn metadata(&mut self, metadata: fs::Metadata) -> &mut Self {
+        self.metadata = Some(metadata);
 
         self
     }
