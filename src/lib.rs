@@ -1,5 +1,5 @@
 #![cfg(any(unix, target_os = "redox"))]
-#![doc(html_root_url = "https://docs.rs/xdg_mime/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/xdg_mime/0.3.0")]
 // FIXME: Remove once we test everything
 #![allow(dead_code)]
 
@@ -66,7 +66,9 @@
 
 use mime::Mime;
 use std::env;
+use std::fs::File;
 use std::fs;
+use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -142,6 +144,8 @@ pub struct GuessBuilder<'a> {
     db: &'a SharedMimeInfo,
     file_name: Option<String>,
     data: Option<Vec<u8>>,
+    metadata: Option<fs::Metadata>,
+    path: Option<PathBuf>,
 }
 
 /// The result of the [`guess`] method of [`GuessBuilder`].
@@ -185,12 +189,150 @@ impl<'a> GuessBuilder<'a> {
         self
     }
 
+    /// Sets the metadata of the file for which you want to get the MIME type.
+    ///
+    /// The metadata can be used to match an existing file or path, for instance:
+    ///
+    /// ```rust
+    /// # use std::error::Error;
+    /// use std::fs;
+    /// use std::str::FromStr;
+    /// use mime::Mime;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// # let metadata = fs::metadata("src/lib.rs")?;
+    /// // let metadata = fs::metadata("/path/to/lib.rs")?;
+    /// let mut guess_builder = mime_db.guess_mime_type();
+    /// let guess = guess_builder
+    ///     .file_name("lib.rs")
+    ///     .metadata(&metadata)
+    ///     .guess();
+    /// assert_eq!(guess.mime_type(), Mime::from_str("text/rust")?);
+    /// #
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn metadata(&mut self, metadata: &fs::Metadata) -> &mut Self {
+        self.metadata = Some(metadata.clone());
+
+        self
+    }
+
+    /// Sets the path of the file for which you want to get the MIME type.
+    ///
+    /// The `path` will be used by the [`guess`] method to extract the
+    /// file name, metadata, and contents, unless you called the [`file_name`],
+    /// [`metadata`], and [`data`] methods, respectively.
+    ///
+    /// ```rust
+    /// # use std::error::Error;
+    /// use std::fs;
+    /// use std::str::FromStr;
+    /// use mime::Mime;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// let mut guess_builder = mime_db.guess_mime_type();
+    /// let guess = guess_builder
+    ///     .path("src")
+    ///     .guess();
+    /// assert_eq!(guess.mime_type(), Mime::from_str("inode/directory")?);
+    /// #
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`guess`]: #method.guess
+    /// [`file_name`]: #method.file_name
+    /// [`metadata`]: #method.metadata
+    /// [`data`]: #method.data
+    pub fn path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
+        let mut buf = PathBuf::new();
+        buf.push(path);
+
+        self.path = Some(buf);
+
+        self
+    }
+
     /// Guesses the MIME type using the data set on the builder. The result is
     /// a [`Guess`] instance that contains both the guessed MIME type, and whether
     /// the result of the guess is certain.
     ///
     /// [`Guess`]: struct.Guess.html
     pub fn guess(&mut self) -> Guess {
+        if let Some(path) = &self.path {
+            // Fill out the metadata
+            if self.metadata.is_none() {
+                self.metadata = match fs::metadata(&path) {
+                    Ok(m) => Some(m),
+                    Err(_) => None
+                };
+            }
+
+            fn load_data_chunk<P: AsRef<Path>>(path: P, chunk_size: usize) -> Option<Vec<u8>> {
+                if chunk_size == 0 {
+                    return None;
+                }
+
+                let mut f = match File::open(&path) {
+                    Ok(file) => file,
+                    Err(_) => return None
+                };
+
+                let mut buf = Vec::with_capacity(chunk_size);
+
+                if f.read_exact(&mut buf).is_err() {
+                    return None;
+                }
+
+                Some(buf)
+            }
+
+            // Load the minimum amount of data necessary for a match
+            if self.data.is_none() {
+                let mut max_data_size = magic::max_extents(&self.db.magic);
+
+                if let Some(metadata) = &self.metadata {
+                    let file_size: usize = metadata.len() as usize;
+                    if file_size < max_data_size {
+                        max_data_size = file_size;
+                    }
+                }
+
+                self.data = load_data_chunk(&path, max_data_size);
+            }
+
+            // Set the file name
+            if self.file_name.is_none() {
+                if let Some(file_name) = path.file_name() {
+                    self.file_name = match file_name.to_os_string().into_string() {
+                        Ok(v) => Some(v),
+                        Err(_) => None
+                    };
+                }
+            }
+        }
+
+        if let Some(metadata) = &self.metadata {
+            if metadata.is_dir() {
+                return Guess {
+                    mime: "inode/directory".parse::<mime::Mime>().unwrap(),
+                    uncertain: true,
+                };
+            }
+
+            if metadata.len() == 0 {
+                return Guess {
+                    mime: "application/x-zerosize".parse::<mime::Mime>().unwrap(),
+                    uncertain: true,
+                };
+            }
+        }
+
         let name_mime_types: Vec<mime::Mime> = match &self.file_name {
             Some(file_name) => self.db.get_mime_types_from_file_name(&file_name),
             None => Vec::new(),
@@ -538,6 +680,11 @@ impl SharedMimeInfo {
     /// Retrieves the MIME type for the given data, and the priority of the
     /// match. A priority above 80 means a certain match.
     pub fn get_mime_type_for_data(&self, data: &[u8]) -> Option<(Mime, u32)> {
+        if data.is_empty() {
+            let empty_mime: mime::Mime = "application/x-zerosize".parse().unwrap();
+            return Some((empty_mime, 100));
+        }
+
         magic::lookup_data(&self.magic, data)
     }
 
@@ -660,6 +807,8 @@ impl SharedMimeInfo {
             db: &self,
             file_name: None,
             data: None,
+            metadata: None,
+            path: None,
         }
     }
 }
