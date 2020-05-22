@@ -23,4 +23,5 @@ nom = "^5"
 unicase = "2.3.0"
 
 [package.metadata.docs.rs]
+default-target = "x86_64-unknown-linux-gnu"
 targets = ["x86_64-unknown-linux-gnu", "i686-unknown-linux-gnu"]
