@@ -139,6 +139,7 @@ pub struct SharedMimeInfo {
 /// [`guess_mime_type`]: struct.SharedMimeInfo.html#method.guess_mime_type
 /// [`file_name`]: #method.file_name
 /// [`data`]: #method.data
+/// [`Guess`]: struct.Guess.html
 /// [`uncertain`]: struct.Guess.html#method.uncertain
 pub struct GuessBuilder<'a> {
     db: &'a SharedMimeInfo,
