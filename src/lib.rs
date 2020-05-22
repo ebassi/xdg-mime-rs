@@ -121,7 +121,7 @@ pub struct SharedMimeInfo {
 /// // let mime_db = ...
 /// let mut guess_builder = mime_db.guess_mime_type();
 /// let guess = guess_builder.file_name("foo.png").guess();
-/// assert_eq!(guess.mime_type(), Mime::from_str("image/png")?);
+/// assert_eq!(guess.mime_type(), &Mime::from_str("image/png")?);
 /// #
 /// # Ok(())
 /// # }
@@ -205,7 +205,7 @@ impl<'a> GuessBuilder<'a> {
     ///     .file_name("lib.rs")
     ///     .metadata(metadata)
     ///     .guess();
-    /// assert_eq!(guess.mime_type(), Mime::from_str("text/rust")?);
+    /// assert_eq!(guess.mime_type(), &Mime::from_str("text/rust")?);
     /// #
     /// # Ok(())
     /// # }
@@ -235,7 +235,7 @@ impl<'a> GuessBuilder<'a> {
     /// let guess = guess_builder
     ///     .path("src")
     ///     .guess();
-    /// assert_eq!(guess.mime_type(), Mime::from_str("inode/directory")?);
+    /// assert_eq!(guess.mime_type(), &Mime::from_str("inode/directory")?);
     /// #
     /// # Ok(())
     /// # }
@@ -408,8 +408,8 @@ impl<'a> GuessBuilder<'a> {
 
 impl Guess {
     /// The guessed MIME type.
-    pub fn mime_type(&self) -> mime::Mime {
-        self.mime.clone()
+    pub fn mime_type(&self) -> &mime::Mime {
+        &self.mime
     }
 
     /// Whether the guessed MIME type is uncertain.
@@ -798,7 +798,7 @@ impl SharedMimeInfo {
     /// // let mime_db = ...
     /// let mut gb = mime_db.guess_mime_type();
     /// let guess = gb.file_name("foo.txt").guess();
-    /// assert_eq!(guess.mime_type(), mime::TEXT_PLAIN);
+    /// assert_eq!(guess.mime_type(), &mime::TEXT_PLAIN);
     /// assert_eq!(guess.uncertain(), false);
     /// #
     /// # Ok(())
@@ -1059,7 +1059,7 @@ mod tests {
 
         let mut gb = mime_db.guess_mime_type();
         let guess = gb.guess();
-        assert_eq!(guess.mime_type(), mime::APPLICATION_OCTET_STREAM);
+        assert_eq!(guess.mime_type(), &mime::APPLICATION_OCTET_STREAM);
         assert_eq!(guess.uncertain(), true);
     }
 
@@ -1068,7 +1068,7 @@ mod tests {
         let mime_db = load_test_data();
         let mut gb = mime_db.guess_mime_type();
         let guess = gb.file_name("foo.txt").guess();
-        assert_eq!(guess.mime_type(), mime::TEXT_PLAIN);
+        assert_eq!(guess.mime_type(), &mime::TEXT_PLAIN);
         assert_eq!(guess.uncertain(), false);
     }
 
@@ -1078,7 +1078,7 @@ mod tests {
         let mime_db = load_test_data();
         let mut gb = mime_db.guess_mime_type();
         let guess = gb.data(svg_data).guess();
-        assert_eq!(guess.mime_type(), Mime::from_str("image/svg+xml").unwrap());
+        assert_eq!(guess.mime_type(), &Mime::from_str("image/svg+xml").unwrap());
         assert_eq!(guess.uncertain(), false);
     }
 
@@ -1088,7 +1088,7 @@ mod tests {
         let mime_db = load_test_data();
         let mut gb = mime_db.guess_mime_type();
         let guess = gb.file_name("rust-logo.png").data(png_data).guess();
-        assert_eq!(guess.mime_type(), Mime::from_str("image/png").unwrap());
+        assert_eq!(guess.mime_type(), &Mime::from_str("image/png").unwrap());
         assert_eq!(guess.uncertain(), false);
     }
 }
