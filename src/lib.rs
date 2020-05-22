@@ -66,7 +66,9 @@
 
 use mime::Mime;
 use std::env;
+use std::fs::File;
 use std::fs;
+use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -143,6 +145,7 @@ pub struct GuessBuilder<'a> {
     file_name: Option<String>,
     data: Option<Vec<u8>>,
     metadata: Option<fs::Metadata>,
+    path: Option<PathBuf>,
 }
 
 /// The result of the [`guess`] method of [`GuessBuilder`].
@@ -217,12 +220,103 @@ impl<'a> GuessBuilder<'a> {
         self
     }
 
+    /// Sets the path of the file for which you want to get the MIME type.
+    ///
+    /// The `path` will be used by the [`guess`] method to extract the
+    /// file name, metadata, and contents, unless you called the [`file_name`],
+    /// [`metadata`], and [`data`] methods, respectively.
+    ///
+    /// ```rust
+    /// # use std::error::Error;
+    /// use std::fs;
+    /// use std::str::FromStr;
+    /// use mime::Mime;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// let mut guess_builder = mime_db.guess_mime_type();
+    /// let guess = guess_builder
+    ///     .path("src")
+    ///     .guess();
+    /// assert_eq!(guess.mime_type(), Mime::from_str("inode/directory")?);
+    /// #
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`guess`]: #method.guess
+    /// [`file_name`]: #method.file_name
+    /// [`metadata`]: #method.metadata
+    /// [`data`]: #method.data
+    pub fn path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
+        let mut buf = PathBuf::new();
+        buf.push(path);
+
+        self.path = Some(buf);
+
+        self
+    }
+
     /// Guesses the MIME type using the data set on the builder. The result is
     /// a [`Guess`] instance that contains both the guessed MIME type, and whether
     /// the result of the guess is certain.
     ///
     /// [`Guess`]: struct.Guess.html
     pub fn guess(&mut self) -> Guess {
+        if let Some(path) = &self.path {
+            // Fill out the metadata
+            if self.metadata.is_none() {
+                self.metadata = match fs::metadata(&path) {
+                    Ok(m) => Some(m),
+                    Err(_) => None
+                };
+            }
+
+            fn load_data_chunk<P: AsRef<Path>>(path: P, chunk_size: usize) -> Option<Vec<u8>> {
+                if chunk_size == 0 {
+                    return None;
+                }
+
+                let mut f = match File::open(&path) {
+                    Ok(file) => file,
+                    Err(_) => return None
+                };
+
+                let mut buf = Vec::with_capacity(chunk_size);
+
+                if f.read_exact(&mut buf).is_err() {
+                    return None;
+                }
+
+                Some(buf)
+            }
+
+            // Load the minimum amount of data necessary for a match
+            if self.data.is_none() {
+                let mut max_data_size = magic::max_extents(&self.db.magic);
+
+                if let Some(metadata) = &self.metadata {
+                    let file_size: usize = metadata.len() as usize;
+                    if file_size < max_data_size {
+                        max_data_size = file_size;
+                    }
+                }
+
+                self.data = load_data_chunk(&path, max_data_size);
+            }
+
+            // Set the file name
+            if self.file_name.is_none() {
+                if let Some(file_name) = path.file_name() {
+                    self.file_name = match file_name.to_os_string().into_string() {
+                        Ok(v) => Some(v),
+                        Err(_) => None
+                    };
+                }
+            }
+        }
+
         if let Some(metadata) = &self.metadata {
             if metadata.is_dir() {
                 return Guess {
@@ -714,6 +808,7 @@ impl SharedMimeInfo {
             file_name: None,
             data: None,
             metadata: None,
+            path: None,
         }
     }
 }
