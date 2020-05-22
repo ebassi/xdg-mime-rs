@@ -142,6 +142,7 @@ pub struct GuessBuilder<'a> {
     db: &'a SharedMimeInfo,
     file_name: Option<String>,
     data: Option<Vec<u8>>,
+    metadata: Option<fs::Metadata>,
 }
 
 /// The result of the [`guess`] method of [`GuessBuilder`].
@@ -185,12 +186,59 @@ impl<'a> GuessBuilder<'a> {
         self
     }
 
+    /// Sets the metadata of the file for which you want to get the MIME type.
+    ///
+    /// The metadata can be used to match an existing file or path, for instance:
+    ///
+    /// ```rust
+    /// # use std::error::Error;
+    /// use std::fs;
+    /// use std::str::FromStr;
+    /// use mime::Mime;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// # let mime_db = xdg_mime::SharedMimeInfo::new();
+    /// // let mime_db = ...
+    /// # let metadata = fs::metadata("src/lib.rs")?;
+    /// // let metadata = fs::metadata("/path/to/lib.rs")?;
+    /// let mut guess_builder = mime_db.guess_mime_type();
+    /// let guess = guess_builder
+    ///     .file_name("lib.rs")
+    ///     .metadata(&metadata)
+    ///     .guess();
+    /// assert_eq!(guess.mime_type(), Mime::from_str("text/rust")?);
+    /// #
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn metadata(&mut self, metadata: &fs::Metadata) -> &mut Self {
+        self.metadata = Some(metadata.clone());
+
+        self
+    }
+
     /// Guesses the MIME type using the data set on the builder. The result is
     /// a [`Guess`] instance that contains both the guessed MIME type, and whether
     /// the result of the guess is certain.
     ///
     /// [`Guess`]: struct.Guess.html
     pub fn guess(&mut self) -> Guess {
+        if let Some(metadata) = &self.metadata {
+            if metadata.is_dir() {
+                return Guess {
+                    mime: "inode/directory".parse::<mime::Mime>().unwrap(),
+                    uncertain: true,
+                };
+            }
+
+            if metadata.len() == 0 {
+                return Guess {
+                    mime: "application/x-zerosize".parse::<mime::Mime>().unwrap(),
+                    uncertain: true,
+                };
+            }
+        }
+
         let name_mime_types: Vec<mime::Mime> = match &self.file_name {
             Some(file_name) => self.db.get_mime_types_from_file_name(&file_name),
             None => Vec::new(),
@@ -665,6 +713,7 @@ impl SharedMimeInfo {
             db: &self,
             file_name: None,
             data: None,
+            metadata: None,
         }
     }
 }
