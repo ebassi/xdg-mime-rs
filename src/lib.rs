@@ -538,6 +538,11 @@ impl SharedMimeInfo {
     /// Retrieves the MIME type for the given data, and the priority of the
     /// match. A priority above 80 means a certain match.
     pub fn get_mime_type_for_data(&self, data: &[u8]) -> Option<(Mime, u32)> {
+        if data.is_empty() {
+            let empty_mime: mime::Mime = "application/x-zerosize".parse().unwrap();
+            return Some((empty_mime, 100));
+        }
+
         magic::lookup_data(&self.magic, data)
     }
 
