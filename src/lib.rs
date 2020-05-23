@@ -348,7 +348,7 @@ impl<'a> GuessBuilder<'a> {
         };
 
         // File name match, and no conflicts
-        if name_mime_types.len() == 1 {
+        if name_mime_types.len() == 1 && name_mime_types[0] != mime::APPLICATION_OCTET_STREAM {
             return Guess {
                 mime: name_mime_types.get(0).unwrap().clone(),
                 uncertain: false,
