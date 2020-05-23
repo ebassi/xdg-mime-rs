@@ -320,6 +320,7 @@ impl<'a> GuessBuilder<'a> {
         if let Some(metadata) = &self.metadata {
             let file_type = metadata.file_type();
 
+            // Special type for directories
             if file_type.is_dir() {
                 return Guess {
                     mime: "inode/directory".parse::<mime::Mime>().unwrap(),
@@ -327,6 +328,7 @@ impl<'a> GuessBuilder<'a> {
                 };
             }
 
+            // Special type for symbolic links
             if file_type.is_symlink() {
                 return Guess {
                     mime: "inode/symlink".parse::<mime::Mime>().unwrap(),
@@ -334,6 +336,7 @@ impl<'a> GuessBuilder<'a> {
                 };
             }
 
+            // Special type for empty files
             if metadata.len() == 0 {
                 return Guess {
                     mime: "application/x-zerosize".parse::<mime::Mime>().unwrap(),
@@ -386,10 +389,10 @@ impl<'a> GuessBuilder<'a> {
                 true
             }
 
-            // "If no magic rule matches the data (or if the content is not available),
-            // use the default type of application/octet-stream for binary data, or
-            // text/plain for textual data."
-            // -- https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#idm45852448283984
+            // "If no magic rule matches the data (or if the content is not
+            // available), use the default type of application/octet-stream
+            // for binary data, or text/plain for textual data."
+            // -- shared-mime-info, "Recommended checking order"
             if mime == mime::APPLICATION_OCTET_STREAM
                 && !self.data.is_empty()
                 && looks_like_text(&self.data)
