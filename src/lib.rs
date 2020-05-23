@@ -1129,6 +1129,33 @@ mod tests {
         let mime_db = load_test_data();
         let mut gb = mime_db.guess_mime_type();
         let guess = gb.data(sh_data).guess();
-        assert_eq!(guess.mime_type(), &Mime::from_str("application/x-shellscript").unwrap());
+        assert_eq!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-shellscript").unwrap()
+        );
+    }
+
+    #[test]
+    fn guess_empty() {
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let file = PathBuf::from(&format!("{}/test_files/files/empty", cwd));
+        let guess = gb.path(file).guess();
+        assert_ne!(guess.mime_type(), &mime::TEXT_PLAIN);
+        assert_eq!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-zerosize").unwrap()
+        );
+    }
+
+    #[test]
+    fn guess_text() {
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let file = PathBuf::from(&format!("{}/test_files/files/text", cwd));
+        let guess = gb.path(file).guess();
+        assert_eq!(guess.mime_type(), &mime::TEXT_PLAIN);
     }
 }
