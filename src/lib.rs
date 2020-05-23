@@ -380,7 +380,15 @@ impl<'a> GuessBuilder<'a> {
             let (mut mime, priority) = sniffed_mime;
 
             fn looks_like_text(data: &[u8]) -> bool {
-                for ch in data {
+                for (i, ch) in data.iter().enumerate() {
+                    // "Checking the first 128 bytes of the file for ASCII
+                    // control characters is a good way to guess whether a
+                    // file is binary or text."
+                    // -- shared-mime-info, "Recommended checking order"
+                    if i > 128 {
+                        break;
+                    }
+
                     if ch.is_ascii_control() && !ch.is_ascii_whitespace() {
                         return false;
                     }
