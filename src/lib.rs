@@ -318,9 +318,18 @@ impl<'a> GuessBuilder<'a> {
         }
 
         if let Some(metadata) = &self.metadata {
-            if metadata.is_dir() {
+            let file_type = metadata.file_type();
+
+            if file_type.is_dir() {
                 return Guess {
                     mime: "inode/directory".parse::<mime::Mime>().unwrap(),
+                    uncertain: true,
+                };
+            }
+
+            if file_type.is_symlink() {
+                return Guess {
+                    mime: "inode/symlink".parse::<mime::Mime>().unwrap(),
                     uncertain: true,
                 };
             }
