@@ -280,7 +280,7 @@ impl<'a> GuessBuilder<'a> {
                     Err(_) => return None,
                 };
 
-                let mut buf = Vec::with_capacity(chunk_size);
+                let mut buf = vec![0u8; chunk_size];
 
                 if f.read_exact(&mut buf).is_err() {
                     return None;
