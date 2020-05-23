@@ -1092,4 +1092,13 @@ mod tests {
         assert_eq!(guess.mime_type(), &Mime::from_str("image/png").unwrap());
         assert_eq!(guess.uncertain(), false);
     }
+
+    #[test]
+    fn guess_script() {
+        let sh_data = include_bytes!("../test_files/files/script");
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let guess = gb.data(sh_data).guess();
+        assert_eq!(guess.mime_type(), &Mime::from_str("application/x-shellscript").unwrap());
+    }
 }
