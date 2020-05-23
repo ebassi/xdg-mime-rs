@@ -365,7 +365,25 @@ impl<'a> GuessBuilder<'a> {
                 uncertain: sniffed_mime.0 == mime::APPLICATION_OCTET_STREAM,
             };
         } else {
-            let (mime, priority) = sniffed_mime;
+            let (mut mime, priority) = sniffed_mime;
+
+            fn looks_like_text(data: &[u8]) -> bool {
+                for ch in data {
+                    if ch.is_ascii_control() && !ch.is_ascii_whitespace() {
+                        return false;
+                    }
+                }
+
+                true
+            }
+
+            // "If no magic rule matches the data (or if the content is not available),
+            // use the default type of application/octet-stream for binary data, or
+            // text/plain for textual data."
+            // -- https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#idm45852448283984
+            if mime == mime::APPLICATION_OCTET_STREAM && looks_like_text(&self.data) {
+                mime = mime::TEXT_PLAIN;
+            }
 
             if mime != mime::APPLICATION_OCTET_STREAM {
                 // We found a match with a high confidence value
