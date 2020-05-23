@@ -43,13 +43,14 @@ impl MagicRule {
     fn matches_data(&self, data: &[u8]) -> bool {
         let start: usize = self.start_offset as usize;
         let end: usize = self.start_offset as usize + self.range_length as usize;
+        let data_len: usize = data.len() as usize;
 
         for i in start..end {
             let mut res: bool = true;
 
             let value_len: usize = self.value_length as usize;
 
-            if i + value_len > data.len() {
+            if i + value_len > data_len {
                 return false;
             }
 
@@ -199,29 +200,27 @@ impl MagicEntry {
         let mut iter = (&self.rules).iter().peekable();
         while let Some(rule) = iter.next() {
             // The rules are a flat list that represent a tree; the "indent"
-            // is the depth of the rule in the tree. If a rule matches at a
-            // certain level, we increase the level and iterate to the next
-            // rule at that level. If this is the last rule, we traversed the
-            // branch; otherwise, we go back one level and keep matching.
-            if rule.indent == current_level {
-                if rule.matches_data(data) {
-                    current_level += 1;
-                    match iter.peek() {
-                        Some(next) => {
-                            // go back one level
-                            if next.indent < current_level {
-                                current_level -= 1;
-                            }
-                        }
-                        None => {
-                            // last rule
+            // is the depth of the rule in the tree.
+            //
+            // Check the rule at the current level
+            if rule.indent == current_level && rule.matches_data(data) {
+                // If the next rule has a lower level, or it's the last
+                // rule, we found our match
+                match iter.peek() {
+                    Some(next) => {
+                        if next.indent <= current_level {
                             return Some((&self.mime_type, self.priority));
                         }
-                    };
-                } else {
-                    // No match at the current level, start from scratch
-                    current_level = 0;
-                }
+
+                        // Otherwise, increase the level and check the
+                        // next rule
+                        current_level += 1;
+                    }
+                    None => {
+                        // last rule
+                        return Some((&self.mime_type, self.priority));
+                    }
+                };
             }
         }
 
