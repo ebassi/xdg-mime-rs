@@ -390,7 +390,10 @@ impl<'a> GuessBuilder<'a> {
             // use the default type of application/octet-stream for binary data, or
             // text/plain for textual data."
             // -- https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#idm45852448283984
-            if mime == mime::APPLICATION_OCTET_STREAM && looks_like_text(&self.data) {
+            if mime == mime::APPLICATION_OCTET_STREAM
+                && !self.data.is_empty()
+                && looks_like_text(&self.data)
+            {
                 mime = mime::TEXT_PLAIN;
             }
 
