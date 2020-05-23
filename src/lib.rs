@@ -1,6 +1,5 @@
 #![cfg(any(unix, target_os = "redox"))]
 #![doc(html_root_url = "https://docs.rs/xdg_mime/0.3.0")]
-// FIXME: Remove once we test everything
 #![allow(dead_code)]
 
 //! SharedMimeInfo allows to look up the MIME type associated to a file name
