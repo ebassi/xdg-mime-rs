@@ -387,7 +387,7 @@ impl<'a> GuessBuilder<'a> {
 
             if mime != mime::APPLICATION_OCTET_STREAM {
                 // We found a match with a high confidence value
-                if priority > 80 {
+                if priority >= 80 {
                     return Guess {
                         mime,
                         uncertain: false,
