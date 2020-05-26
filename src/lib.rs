@@ -431,21 +431,14 @@ impl<'a> GuessBuilder<'a> {
 }
 
 fn looks_like_text(data: &[u8]) -> bool {
-    for (i, ch) in data.iter().enumerate() {
-        // "Checking the first 128 bytes of the file for ASCII
-        // control characters is a good way to guess whether a
-        // file is binary or text."
-        // -- shared-mime-info, "Recommended checking order"
-        if i > 128 {
-            break;
-        }
-
-        if ch.is_ascii_control() && !ch.is_ascii_whitespace() {
-            return false;
-        }
-    }
-
-    true
+    // "Checking the first 128 bytes of the file for ASCII
+    // control characters is a good way to guess whether a
+    // file is binary or text."
+    // -- shared-mime-info, "Recommended checking order"
+    !data
+        .iter()
+        .take(128)
+        .any(|ch| ch.is_ascii_control() && !ch.is_ascii_whitespace())
 }
 
 impl Guess {
