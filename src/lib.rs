@@ -2,11 +2,11 @@
 #![doc(html_root_url = "https://docs.rs/xdg_mime/0.3.0")]
 #![allow(dead_code)]
 
-//! SharedMimeInfo allows to look up the MIME type associated to a file name
+//! `xdg_mime` allows to look up the MIME type associated to a file name
 //! or to the contents of a file, using the [Freedesktop.org Shared MIME
 //! database specification][xdg-mime].
 //!
-//! Alongside the MIME type, the Shared MIME database contains other ancillary
+//! Alongside the MIME type, the shared MIME database contains other ancillary
 //! information, like the icon associated to the MIME type; the aliases for
 //! a given MIME type; and the various sub-classes of a MIME type.
 //!
@@ -87,7 +87,7 @@ struct MimeDirectory {
     mtime: SystemTime,
 }
 
-/// The shared MIME info database
+/// The shared MIME info database.
 pub struct SharedMimeInfo {
     aliases: alias::AliasesList,
     parents: parent::ParentsMap,
@@ -423,6 +423,7 @@ impl<'a> GuessBuilder<'a> {
             }
         }
 
+        // Okay, we give up
         Guess {
             mime: mime::APPLICATION_OCTET_STREAM,
             uncertain: true,
