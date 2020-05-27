@@ -403,13 +403,14 @@ impl<'a> GuessBuilder<'a> {
                 // file name, so let's see if the sniffed MIME type is
                 // a subclass of the MIME type associated to the file name,
                 // and use that as a tie breaker
-                for mime_type in &name_mime_types {
-                    if self.db.mime_type_subclass(&mime_type, &mime) {
-                        return Guess {
-                            mime: mime_type.clone(),
-                            uncertain: false,
-                        };
-                    }
+                if let Some(mime_type) = name_mime_types
+                    .iter()
+                    .find(|m| self.db.mime_type_subclass(m, &mime))
+                {
+                    return Guess {
+                        mime: mime_type.clone(),
+                        uncertain: false,
+                    };
                 }
             }
 
