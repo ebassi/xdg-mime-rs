@@ -290,13 +290,10 @@ named!(from_u8_to_entries<Vec<MagicEntry>>,
 );
 
 pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
-    for entry in entries {
-        if let Some(v) = entry.matches(data) {
-            return Some((v.0.clone(), v.1));
-        }
-    }
-
-    None
+    entries
+        .iter()
+        .find_map(|e| e.matches(data))
+        .map(|v| (v.0.clone(), v.1))
 }
 
 pub fn max_extents(entries: &[MagicEntry]) -> usize {
