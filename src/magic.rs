@@ -57,8 +57,6 @@ fn masked_slices_are_equal(a: &[u8], b: &[u8], mask: &[u8]) -> bool {
 
 impl MagicRule {
     fn matches_data(&self, data: &[u8]) -> bool {
-        // Do we need the value_length at all, if it's implicit in
-        // value.len() and checked by the parsers?
         assert!(self.value_length as usize == self.value.len());
         assert!(self.mask.is_none() || self.mask.as_ref().unwrap().len() == self.value.len());
 
