@@ -39,48 +39,44 @@ struct MagicRule {
     range_length: u32,
 }
 
+fn masked_slices_are_equal(a: &[u8], b: &[u8], mask: &[u8]) -> bool {
+    assert!(a.len() == b.len() && a.len() == mask.len());
+
+    let masked_a = a
+        .iter()
+        .zip(mask.iter())
+        .map(|(x, m)| *x & *m);
+
+    let masked_b = b
+        .iter()
+        .zip(mask.iter())
+        .map(|(x, m)| *x & *m);
+
+    masked_a.eq(masked_b)
+}
+
 impl MagicRule {
     fn matches_data(&self, data: &[u8]) -> bool {
-        let start: usize = self.start_offset as usize;
-        let end: usize = self.start_offset as usize + self.range_length as usize;
-        let data_len: usize = data.len() as usize;
+        // Do we need the value_length at all, if it's implicit in
+        // value.len() and checked by the parsers?
+        assert!(self.value_length as usize == self.value.len());
+        assert!(self.mask.is_none() || self.mask.as_ref().unwrap().len() == self.value.len());
 
-        for i in start..end {
-            let mut res: bool = true;
+        let start = self.start_offset as usize;
+        let range_length = self.range_length as usize;
+        let value_len = self.value.len();
 
-            let value_len: usize = self.value_length as usize;
+        let mut data_windows = data.windows(value_len).skip(start).take(range_length);
 
-            if i + value_len > data_len {
-                return false;
-            }
+        match &self.mask {
+            Some(mask) => data_windows.any(|data_w| {
+                masked_slices_are_equal(data_w, &self.value, &mask)
+            }),
 
-            match &self.mask {
-                Some(m) => {
-                    for j in 0..value_len {
-                        let masked_value = self.value[j] & m[j];
-                        let masked_data = data[j + i] & m[j];
-                        if masked_value != masked_data {
-                            res = false;
-                            break;
-                        }
-                    }
-                }
-                None => {
-                    for j in 0..value_len {
-                        if data[j + i] != self.value[j] {
-                            res = false;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if res {
-                return true;
-            }
+            None => data_windows.any(|data_w| {
+                data_w == &self.value[..]
+            }),
         }
-
-        false
     }
 
     fn extent(&self) -> usize {
