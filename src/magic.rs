@@ -449,4 +449,93 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn magic_rule_matches_data() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 0,
+            value_length: 5,
+            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            mask: None,
+            word_size: 1,
+            range_length: 30,
+        };
+
+        assert!(rule.matches_data(b"hello world"));
+        assert!(rule.matches_data(b"world hello"));
+    }
+
+    #[test]
+    fn magic_rule_matches_data_with_start_offset() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 1,
+            value_length: 5,
+            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            mask: None,
+            word_size: 1,
+            range_length: 30,
+        };
+
+        assert!(!rule.matches_data(b"hello world"));
+        assert!(rule.matches_data(b"xhello world"));
+        assert!(rule.matches_data(b"world hello"));
+    }
+
+    #[test]
+    fn magic_rule_matches_data_with_range_length() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 0,
+            value_length: 5,
+            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            mask: None,
+            word_size: 1,
+            range_length: 10,
+        };
+
+        assert!(rule.matches_data(b"hello world"));
+        assert!(rule.matches_data(b"12345hello"));
+        assert!(rule.matches_data(b"123456789hello"));
+        assert!(!rule.matches_data(b"1234567890hello"));
+        assert!(!rule.matches_data(b"too long a prefix for this to match hello"));
+    }
+
+    #[test]
+    fn magic_rule_matches_data_with_start_offset_and_range_length() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 1,
+            value_length: 5,
+            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            mask: None,
+            word_size: 1,
+            range_length: 3,
+        };
+
+        assert!(!rule.matches_data(b"hello world"));
+        assert!(rule.matches_data(b"1hello world"));
+        assert!(rule.matches_data(b"12hello world"));
+        assert!(rule.matches_data(b"123hello world"));
+        assert!(!rule.matches_data(b"1234hello world"));
+    }
+
+    #[test]
+    fn magic_rule_matches_data_with_mask() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 0,
+            value_length: 5,
+            value: vec!['h' as u8, 'E' as u8, 'l' as u8, 'l' as u8, 'O' as u8],
+            mask: Some(vec![!0x20; 5]),
+            word_size: 1,
+            range_length: 30,
+        };
+
+        assert!(rule.matches_data(b"HeLlo world"));
+        assert!(rule.matches_data(b"world HeLlo"));
+        assert!(rule.matches_data(b"12345heLLO"));
+        assert!(!rule.matches_data(b"HuLLO WORLD"));
+    }
 }
