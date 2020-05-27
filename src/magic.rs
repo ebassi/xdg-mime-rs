@@ -32,7 +32,6 @@ pub fn buf_to_u32(s: &[u8], or_default: u32) -> u32 {
 struct MagicRule {
     indent: u32,
     start_offset: u32,
-    value_length: u16,
     value: Vec<u8>,
     mask: Option<Vec<u8>>,
     word_size: u32,
@@ -57,7 +56,6 @@ fn masked_slices_are_equal(a: &[u8], b: &[u8], mask: &[u8]) -> bool {
 
 impl MagicRule {
     fn matches_data(&self, data: &[u8]) -> bool {
-        assert!(self.value_length as usize == self.value.len());
         assert!(self.mask.is_none() || self.mask.as_ref().unwrap().len() == self.value.len());
 
         let start = self.start_offset as usize;
@@ -78,7 +76,7 @@ impl MagicRule {
     }
 
     fn extent(&self) -> usize {
-        let value_len = self.value_length as usize;
+        let value_len = self.value.len();
         let offset = self.start_offset as usize;
         let range_len = self.range_length as usize;
 
@@ -161,7 +159,6 @@ named!(
     >>  (MagicRule {
             indent: _indent,
             start_offset: _start_offset,
-            value_length: _value_length,
             value: _value,
             mask: _mask,
             word_size: _word_size.unwrap_or(1),
@@ -449,7 +446,6 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 0,
-            value_length: 5,
             value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
             mask: None,
             word_size: 1,
@@ -465,7 +461,6 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 1,
-            value_length: 5,
             value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
             mask: None,
             word_size: 1,
@@ -482,7 +477,6 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 0,
-            value_length: 5,
             value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
             mask: None,
             word_size: 1,
@@ -501,7 +495,6 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 1,
-            value_length: 5,
             value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
             mask: None,
             word_size: 1,
@@ -520,7 +513,6 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 0,
-            value_length: 5,
             value: vec!['h' as u8, 'E' as u8, 'l' as u8, 'l' as u8, 'O' as u8],
             mask: Some(vec![!0x20; 5]),
             word_size: 1,
