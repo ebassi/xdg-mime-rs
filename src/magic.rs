@@ -300,15 +300,11 @@ pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
 }
 
 pub fn max_extents(entries: &[MagicEntry]) -> usize {
-    let mut res: usize = 0;
-    for entry in entries {
-        let extents = entry.max_extents();
-        if extents > res {
-            res = extents;
-        }
-    }
-
-    res
+    entries
+        .iter()
+        .map(MagicEntry::max_extents)
+        .max()
+        .unwrap_or(0)
 }
 
 pub fn read_magic_from_file<P: AsRef<Path>>(file_name: P) -> Vec<MagicEntry> {
