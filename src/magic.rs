@@ -228,15 +228,11 @@ impl MagicEntry {
     }
 
     fn max_extents(&self) -> usize {
-        let mut res: usize = 0;
-        for rule in &self.rules {
-            let rule_extent = rule.extent();
-            if rule_extent > res {
-                res = rule_extent;
-            }
-        }
-
-        res
+        self.rules
+            .iter()
+            .map(MagicRule::extent)
+            .max()
+            .unwrap_or(0)
     }
 }
 
