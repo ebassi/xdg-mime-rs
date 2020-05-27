@@ -379,24 +379,6 @@ impl<'a> GuessBuilder<'a> {
         } else {
             let (mut mime, priority) = sniffed_mime;
 
-            fn looks_like_text(data: &[u8]) -> bool {
-                for (i, ch) in data.iter().enumerate() {
-                    // "Checking the first 128 bytes of the file for ASCII
-                    // control characters is a good way to guess whether a
-                    // file is binary or text."
-                    // -- shared-mime-info, "Recommended checking order"
-                    if i > 128 {
-                        break;
-                    }
-
-                    if ch.is_ascii_control() && !ch.is_ascii_whitespace() {
-                        return false;
-                    }
-                }
-
-                true
-            }
-
             // "If no magic rule matches the data (or if the content is not
             // available), use the default type of application/octet-stream
             // for binary data, or text/plain for textual data."
@@ -421,13 +403,14 @@ impl<'a> GuessBuilder<'a> {
                 // file name, so let's see if the sniffed MIME type is
                 // a subclass of the MIME type associated to the file name,
                 // and use that as a tie breaker
-                for mime_type in &name_mime_types {
-                    if self.db.mime_type_subclass(&mime_type, &mime) {
-                        return Guess {
-                            mime: mime_type.clone(),
-                            uncertain: false,
-                        };
-                    }
+                if let Some(mime_type) = name_mime_types
+                    .iter()
+                    .find(|m| self.db.mime_type_subclass(m, &mime))
+                {
+                    return Guess {
+                        mime: mime_type.clone(),
+                        uncertain: false,
+                    };
                 }
             }
 
@@ -446,6 +429,17 @@ impl<'a> GuessBuilder<'a> {
             uncertain: true,
         }
     }
+}
+
+fn looks_like_text(data: &[u8]) -> bool {
+    // "Checking the first 128 bytes of the file for ASCII
+    // control characters is a good way to guess whether a
+    // file is binary or text."
+    // -- shared-mime-info, "Recommended checking order"
+    !data
+        .iter()
+        .take(128)
+        .any(|ch| ch.is_ascii_control() && !ch.is_ascii_whitespace())
 }
 
 impl Guess {
@@ -1168,5 +1162,13 @@ mod tests {
         let file = PathBuf::from(&format!("{}/test_files/files/text", cwd));
         let guess = gb.path(file).guess();
         assert_eq!(guess.mime_type(), &mime::TEXT_PLAIN);
+    }
+
+    #[test]
+    fn looks_like_text_works() {
+        assert!(looks_like_text(&[]));
+        assert!(looks_like_text(b"hello"));
+        assert!(!looks_like_text(b"hello\x00"));
+        assert!(!looks_like_text(&[0, 1, 2]));
     }
 }

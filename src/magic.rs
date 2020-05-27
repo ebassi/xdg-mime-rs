@@ -32,59 +32,51 @@ pub fn buf_to_u32(s: &[u8], or_default: u32) -> u32 {
 struct MagicRule {
     indent: u32,
     start_offset: u32,
-    value_length: u16,
     value: Vec<u8>,
     mask: Option<Vec<u8>>,
     word_size: u32,
     range_length: u32,
 }
 
+fn masked_slices_are_equal(a: &[u8], b: &[u8], mask: &[u8]) -> bool {
+    assert!(a.len() == b.len() && a.len() == mask.len());
+
+    let masked_a = a
+        .iter()
+        .zip(mask.iter())
+        .map(|(x, m)| *x & *m);
+
+    let masked_b = b
+        .iter()
+        .zip(mask.iter())
+        .map(|(x, m)| *x & *m);
+
+    masked_a.eq(masked_b)
+}
+
 impl MagicRule {
     fn matches_data(&self, data: &[u8]) -> bool {
-        let start: usize = self.start_offset as usize;
-        let end: usize = self.start_offset as usize + self.range_length as usize;
-        let data_len: usize = data.len() as usize;
+        assert!(self.mask.is_none() || self.mask.as_ref().unwrap().len() == self.value.len());
 
-        for i in start..end {
-            let mut res: bool = true;
+        let start = self.start_offset as usize;
+        let range_length = self.range_length as usize;
+        let value_len = self.value.len();
 
-            let value_len: usize = self.value_length as usize;
+        let mut data_windows = data.windows(value_len).skip(start).take(range_length);
 
-            if i + value_len > data_len {
-                return false;
-            }
+        match &self.mask {
+            Some(mask) => data_windows.any(|data_w| {
+                masked_slices_are_equal(data_w, &self.value, &mask)
+            }),
 
-            match &self.mask {
-                Some(m) => {
-                    for j in 0..value_len {
-                        let masked_value = self.value[j] & m[j];
-                        let masked_data = data[j + i] & m[j];
-                        if masked_value != masked_data {
-                            res = false;
-                            break;
-                        }
-                    }
-                }
-                None => {
-                    for j in 0..value_len {
-                        if data[j + i] != self.value[j] {
-                            res = false;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if res {
-                return true;
-            }
+            None => data_windows.any(|data_w| {
+                data_w == &self.value[..]
+            }),
         }
-
-        false
     }
 
     fn extent(&self) -> usize {
-        let value_len = self.value_length as usize;
+        let value_len = self.value.len();
         let offset = self.start_offset as usize;
         let range_len = self.range_length as usize;
 
@@ -167,7 +159,6 @@ named!(
     >>  (MagicRule {
             indent: _indent,
             start_offset: _start_offset,
-            value_length: _value_length,
             value: _value,
             mask: _mask,
             word_size: _word_size.unwrap_or(1),
@@ -228,15 +219,11 @@ impl MagicEntry {
     }
 
     fn max_extents(&self) -> usize {
-        let mut res: usize = 0;
-        for rule in &self.rules {
-            let rule_extent = rule.extent();
-            if rule_extent > res {
-                res = rule_extent;
-            }
-        }
-
-        res
+        self.rules
+            .iter()
+            .map(MagicRule::extent)
+            .max()
+            .unwrap_or(0)
     }
 }
 
@@ -294,25 +281,18 @@ named!(from_u8_to_entries<Vec<MagicEntry>>,
 );
 
 pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
-    for entry in entries {
-        if let Some(v) = entry.matches(data) {
-            return Some((v.0.clone(), v.1));
-        }
-    }
-
-    None
+    entries
+        .iter()
+        .find_map(|e| e.matches(data))
+        .map(|v| (v.0.clone(), v.1))
 }
 
 pub fn max_extents(entries: &[MagicEntry]) -> usize {
-    let mut res: usize = 0;
-    for entry in entries {
-        let extents = entry.max_extents();
-        if extents > res {
-            res = extents;
-        }
-    }
-
-    res
+    entries
+        .iter()
+        .map(MagicEntry::max_extents)
+        .max()
+        .unwrap_or(0)
 }
 
 pub fn read_magic_from_file<P: AsRef<Path>>(file_name: P) -> Vec<MagicEntry> {
@@ -459,5 +439,89 @@ mod tests {
                 panic!("cannot parse magic file");
             }
         }
+    }
+
+    #[test]
+    fn magic_rule_matches_data() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 0,
+            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            mask: None,
+            word_size: 1,
+            range_length: 30,
+        };
+
+        assert!(rule.matches_data(b"hello world"));
+        assert!(rule.matches_data(b"world hello"));
+    }
+
+    #[test]
+    fn magic_rule_matches_data_with_start_offset() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 1,
+            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            mask: None,
+            word_size: 1,
+            range_length: 30,
+        };
+
+        assert!(!rule.matches_data(b"hello world"));
+        assert!(rule.matches_data(b"xhello world"));
+        assert!(rule.matches_data(b"world hello"));
+    }
+
+    #[test]
+    fn magic_rule_matches_data_with_range_length() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 0,
+            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            mask: None,
+            word_size: 1,
+            range_length: 10,
+        };
+
+        assert!(rule.matches_data(b"hello world"));
+        assert!(rule.matches_data(b"12345hello"));
+        assert!(rule.matches_data(b"123456789hello"));
+        assert!(!rule.matches_data(b"1234567890hello"));
+        assert!(!rule.matches_data(b"too long a prefix for this to match hello"));
+    }
+
+    #[test]
+    fn magic_rule_matches_data_with_start_offset_and_range_length() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 1,
+            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            mask: None,
+            word_size: 1,
+            range_length: 3,
+        };
+
+        assert!(!rule.matches_data(b"hello world"));
+        assert!(rule.matches_data(b"1hello world"));
+        assert!(rule.matches_data(b"12hello world"));
+        assert!(rule.matches_data(b"123hello world"));
+        assert!(!rule.matches_data(b"1234hello world"));
+    }
+
+    #[test]
+    fn magic_rule_matches_data_with_mask() {
+        let rule = MagicRule {
+            indent: 0,
+            start_offset: 0,
+            value: vec!['h' as u8, 'E' as u8, 'l' as u8, 'l' as u8, 'O' as u8],
+            mask: Some(vec![!0x20; 5]),
+            word_size: 1,
+            range_length: 30,
+        };
+
+        assert!(rule.matches_data(b"HeLlo world"));
+        assert!(rule.matches_data(b"world HeLlo"));
+        assert!(rule.matches_data(b"12345heLLO"));
+        assert!(!rule.matches_data(b"HuLLO WORLD"));
     }
 }
