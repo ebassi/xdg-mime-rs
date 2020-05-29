@@ -58,6 +58,7 @@ impl AliasesList {
 
     pub fn add_aliases(&mut self, aliases: Vec<Alias>) {
         self.aliases.extend(aliases);
+        self.sort();
     }
 
     pub fn sort(&mut self) {
