@@ -1,8 +1,10 @@
-use nom::bytes::complete::take_until;
+use nom::bytes::complete::{tag, take_until};
 use nom::character::complete::line_ending;
 use nom::character::is_hex_digit;
-use nom::combinator::map_res;
+use nom::combinator::{complete, map_res};
+use nom::multi::{many0, many1};
 use nom::number::streaming::be_u16;
+use nom::sequence::tuple;
 use nom::IResult;
 use std::fmt;
 use std::fs::File;
@@ -85,23 +87,18 @@ impl MagicRule {
 }
 
 // Indentation level, can be 0
-named!(
-    indent_level<u32>,
-    do_parse!(
-        res: take_until!(">")
-    >>  (buf_to_u32(res, 0))
-    )
-);
+fn indent_level(bytes: &[u8]) -> IResult<&[u8], u32> {
+    let (bytes, res) = take_until(">")(bytes)?;
+
+    Ok((bytes, buf_to_u32(res, 0)))
+}
 
 // Offset, can be 0
-named!(
-    start_offset<u32>,
-    do_parse!(
-        res: take_until!("=")
-    >>  (buf_to_u32(res, 0))
-    )
-);
+fn start_offset(bytes: &[u8]) -> IResult<&[u8], u32> {
+    let (bytes, res) = take_until("=")(bytes)?;
 
+    Ok((bytes, buf_to_u32(res, 0)))
+}
 
 // <word_size> = '~' (0 | 1 | 2 | 4)
 named!(
@@ -227,12 +224,11 @@ impl MagicEntry {
     }
 }
 
-named!(priority<u32>,
-    do_parse!(
-        res: take_until!(":")
-    >>  (buf_to_u32(res, 0))
-    )
-);
+fn priority(bytes: &[u8]) -> IResult<&[u8], u32> {
+    let (bytes, res) = take_until(":")(bytes)?;
+
+    Ok((bytes, buf_to_u32(res, 0)))
+}
 
 fn mime_type(bytes: &[u8]) -> IResult<&[u8], Mime> {
     map_res(
@@ -246,39 +242,42 @@ fn mime_type(bytes: &[u8]) -> IResult<&[u8], Mime> {
 
 // magic_header =
 // '[' <priority> ':' <mime_type> ']' '\n'
-named!(magic_header<(u32, Mime)>,
-    do_parse!(
-        tag!("[")
-    >>  _priority: priority
-    >>  tag!(":")
-    >>  _mime_type: mime_type
-    >>  tag!("]\n")
-    >>  (_priority, _mime_type)
-    )
-);
+fn magic_header(bytes: &[u8]) -> IResult<&[u8], (u32, Mime)> {
+    let (bytes, (_, _priority, _, _mime_type, _)) = tuple((
+        tag("["),
+        priority,
+        tag(":"),
+        mime_type,
+        tag("]\n"),
+    ))(bytes)?;
+
+    Ok((bytes, (_priority, _mime_type)))
+}
 
 // magic_entry =
 // <magic_header>
 // <magic_rule>+
-named!(magic_entry<MagicEntry>,
-    do_parse!(
-        _header: magic_header
-    >>  _rules: many1!(complete!(magic_rule))
-    >>  (MagicEntry {
-            priority: _header.0,
-            mime_type: _header.1,
-            rules: _rules,
-        })
-    )
-);
+fn magic_entry(bytes: &[u8]) -> IResult<&[u8], MagicEntry> {
+    let (bytes, (_header, _rules)) = tuple((
+        magic_header,
+        many1(complete(magic_rule)),
+    ))(bytes)?;
 
-named!(from_u8_to_entries<Vec<MagicEntry>>,
-    do_parse!(
-	tag!("MIME-Magic\0\n")
-    >>  res: many0!(complete!(magic_entry))
-    >>  (res)
-    )
-);
+    Ok((bytes, MagicEntry {
+        priority: _header.0,
+        mime_type: _header.1,
+        rules: _rules,
+    }))
+}
+
+fn from_u8_to_entries(bytes: &[u8]) -> IResult<&[u8], Vec<MagicEntry>> {
+    let (bytes, (_, entries)) = tuple((
+        tag("MIME-Magic\0\n"),
+        many0(magic_entry),
+    ))(bytes)?;
+
+    Ok((bytes, entries))
+}
 
 pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
     entries
