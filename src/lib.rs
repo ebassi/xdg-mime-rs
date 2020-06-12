@@ -401,13 +401,17 @@ impl<'a> GuessBuilder<'a> {
                 // We have possible conflicts, but the data matches the
                 // file name, so let's see if the sniffed MIME type is
                 // a subclass of the MIME type associated to the file name,
-                // and use that as a tie breaker
-                if let Some(mime_type) = name_mime_types
+                // and use that as a tie breaker.
+                //
+                // We don't care about the element returned by find(),
+                // because that will be the superclass of the sniffed MIME
+                // type.
+                if let Some(_) = name_mime_types
                     .iter()
-                    .find(|m| self.db.mime_type_subclass(m, &mime))
+                    .find(|m| self.db.mime_type_subclass(&mime, m))
                 {
                     return Guess {
-                        mime: mime_type.clone(),
+                        mime,
                         uncertain: false,
                     };
                 }
@@ -1087,6 +1091,13 @@ mod tests {
             ),
             true
         );
+        assert_eq!(
+            mime_db.mime_type_subclass(
+                &Mime::from_str("application/x-shellscript").unwrap(),
+                &mime::APPLICATION_OCTET_STREAM
+            ),
+            true
+        );
     }
 
     #[test]
@@ -1134,6 +1145,18 @@ mod tests {
         let mime_db = load_test_data();
         let mut gb = mime_db.guess_mime_type();
         let guess = gb.data(sh_data).guess();
+        assert_eq!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-shellscript").unwrap()
+        );
+    }
+
+    #[test]
+    fn guess_script_with_name() {
+        let sh_data = include_bytes!("../test_files/files/gp");
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let guess = gb.file_name("gp").data(sh_data).guess();
         assert_eq!(
             guess.mime_type(),
             &Mime::from_str("application/x-shellscript").unwrap()

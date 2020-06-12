@@ -1,0 +1,4 @@
+#!/usr/bin/bash
+git add --all
+git commit -a -m "$@"
+git push -u origin $(git rev-parse --abbrev-ref HEAD)
