@@ -1171,4 +1171,23 @@ mod tests {
         assert!(!looks_like_text(b"hello\x00"));
         assert!(!looks_like_text(&[0, 1, 2]));
     }
+
+    #[test]
+    fn guess_turtle() {
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let ttl_file = PathBuf::from(&format!("{}/test_files/files/example.ttl", cwd));
+        let ttl_data = include_bytes!("../test_files/files/example.ttl");
+        let ttl_meta = std::fs::metadata(ttl_file).unwrap();
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let guess = gb
+            .file_name("example.ttl")
+            .metadata(ttl_meta)
+            .data(ttl_data)
+            .guess();
+        assert_eq!(
+            guess.mime_type(),
+            &Mime::from_str("text/turtle").unwrap()
+        );
+    }
 }
