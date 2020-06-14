@@ -4,6 +4,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::hash::{Hash, Hasher};
 use std::collections::HashSet;
 
 use glob::Pattern;
@@ -45,12 +46,30 @@ fn determine_type(glob: &str) -> GlobType {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone)]
 pub struct Glob {
     glob: GlobType,
     weight: i32,
     case_sensitive: bool,
     mime_type: Mime,
+}
+
+impl PartialEq for Glob {
+    fn eq(&self, other: &Glob) -> bool {
+        self.glob == other.glob &&
+        self.case_sensitive == other.case_sensitive &&
+        self.mime_type == other.mime_type
+    }
+}
+
+impl Eq for Glob { }
+
+impl Hash for Glob {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.glob.hash(h);
+        self.case_sensitive.hash(h);
+        self.mime_type.hash(h)
+    }
 }
 
 impl fmt::Debug for Glob {
@@ -244,11 +263,18 @@ impl GlobMap {
     }
 
     pub fn add_glob(&mut self, glob: Glob) {
-        self.globs.insert(glob);
+        let weight = glob.weight;
+        if let Some(previous_glob) = self.globs.replace(glob) {
+            if previous_glob.weight > weight {
+                self.globs.insert(previous_glob); // we keep the highest weight.
+            }
+        }
     }
 
     pub fn add_globs(&mut self, globs: &[Glob]) {
-        self.globs.extend(globs.iter().map(|glob| glob.clone()));
+        for glob in globs {
+            self.add_glob(glob.clone())
+        }
     }
 
     pub fn lookup_mime_type_for_file_name(&self, file_name: &str) -> Option<Vec<Mime>> {
