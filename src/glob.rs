@@ -261,7 +261,7 @@ impl GlobMap {
     }
 
     pub fn add_glob(&mut self, glob: Glob) {
-        self.globs.replace(glob);
+        self.globs.insert(glob);
     }
 
     pub fn add_globs(&mut self, globs: &[Glob]) {
