@@ -57,7 +57,6 @@ pub struct Glob {
 impl PartialEq for Glob {
     fn eq(&self, other: &Glob) -> bool {
         self.glob == other.glob &&
-        self.case_sensitive == other.case_sensitive &&
         self.mime_type == other.mime_type
     }
 }
@@ -67,7 +66,6 @@ impl Eq for Glob { }
 impl Hash for Glob {
     fn hash<H: Hasher>(&self, h: &mut H) {
         self.glob.hash(h);
-        self.case_sensitive.hash(h);
         self.mime_type.hash(h)
     }
 }
