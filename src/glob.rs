@@ -263,18 +263,11 @@ impl GlobMap {
     }
 
     pub fn add_glob(&mut self, glob: Glob) {
-        let weight = glob.weight;
-        if let Some(previous_glob) = self.globs.replace(glob) {
-            if previous_glob.weight > weight {
-                self.globs.insert(previous_glob); // we keep the highest weight.
-            }
-        }
+        self.globs.replace(glob);
     }
 
     pub fn add_globs(&mut self, globs: &[Glob]) {
-        for glob in globs {
-            self.add_glob(glob.clone())
-        }
+        self.globs.extend(globs.iter().map(|glob| glob.clone()));
     }
 
     pub fn lookup_mime_type_for_file_name(&self, file_name: &str) -> Option<Vec<Mime>> {
