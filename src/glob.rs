@@ -4,12 +4,13 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::collections::HashSet;
 
 use glob::Pattern;
 use mime::Mime;
 use unicase::UniCase;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum GlobType {
     Literal(String),
     Simple(String),
@@ -44,7 +45,7 @@ fn determine_type(glob: &str) -> GlobType {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Glob {
     glob: GlobType,
     weight: i32,
@@ -234,20 +235,20 @@ pub fn read_globs_from_dir<P: AsRef<Path>>(dir: P) -> Vec<Glob> {
 }
 
 pub struct GlobMap {
-    globs: Vec<Glob>,
+    globs: HashSet<Glob>,
 }
 
 impl GlobMap {
     pub fn new() -> GlobMap {
-        GlobMap { globs: Vec::new() }
+        GlobMap { globs: HashSet::new() }
     }
 
     pub fn add_glob(&mut self, glob: Glob) {
-        self.globs.push(glob);
+        self.globs.insert(glob);
     }
 
     pub fn add_globs(&mut self, globs: &[Glob]) {
-        self.globs.extend_from_slice(globs);
+        self.globs.extend(globs.iter().map(|glob| glob.clone()));
     }
 
     pub fn lookup_mime_type_for_file_name(&self, file_name: &str) -> Option<Vec<Mime>> {
