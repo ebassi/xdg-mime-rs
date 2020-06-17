@@ -72,7 +72,6 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 extern crate dirs;
-#[macro_use]
 extern crate nom;
 
 mod alias;
