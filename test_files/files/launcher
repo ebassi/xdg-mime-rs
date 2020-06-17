@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Some launcher
+Comment=A launcher for an application
+Exec=/usr/bin/sh -c echo 'Hello'
+Terminal=true
+Type=Application

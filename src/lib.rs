@@ -388,6 +388,21 @@ impl<'a> GuessBuilder<'a> {
                 mime = mime::TEXT_PLAIN;
             }
 
+            // From the content type guessing implementation in GIO:
+            //
+            // For security reasons we don't ever want to sniff desktop files
+            // where we know the filename and it doesn't have a .desktop extension.
+            // This is because desktop files allow executing any application and
+            // we don't want to make it possible to hide them looking like something
+            // else.
+            if self.file_name.is_some() {
+                let x_desktop = "application/x-desktop".parse::<mime::Mime>().unwrap();
+
+                if mime == x_desktop {
+                    mime = mime::TEXT_PLAIN;
+                }
+            }
+
             if mime != mime::APPLICATION_OCTET_STREAM {
                 // We found a match with a high confidence value
                 if priority >= 80 {
@@ -401,10 +416,6 @@ impl<'a> GuessBuilder<'a> {
                 // file name, so let's see if the sniffed MIME type is
                 // a subclass of the MIME type associated to the file name,
                 // and use that as a tie breaker.
-                //
-                // We don't care about the element returned by find(),
-                // because that will be the superclass of the sniffed MIME
-                // type.
                 if name_mime_types
                     .iter()
                     .any(|m| self.db.mime_type_subclass(&mime, m))
@@ -1208,5 +1219,21 @@ mod tests {
             .data(ttl_data)
             .guess();
         assert_eq!(guess.mime_type(), &Mime::from_str("text/turtle").unwrap());
+    }
+
+    #[test]
+    fn guess_dodgy_desktop_file() {
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let desktop_file = PathBuf::from(&format!("{}/test_files/files/launcher", cwd));
+        let desktop_data = include_bytes!("../test_files/files/launcher");
+        let desktop_meta = std::fs::metadata(desktop_file).unwrap();
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let guess = gb
+            .file_name("launcher")
+            .metadata(desktop_meta)
+            .data(desktop_data)
+            .guess();
+        assert_eq!(guess.mime_type(), &Mime::from_str("text/plain").unwrap());
     }
 }
