@@ -265,7 +265,7 @@ impl GlobMap {
     }
 
     pub fn add_globs(&mut self, globs: &[Glob]) {
-        self.globs.extend(globs.iter().map(|glob| glob.clone()));
+        self.globs.extend(globs.iter().cloned());
     }
 
     pub fn lookup_mime_type_for_file_name(&self, file_name: &str) -> Option<Vec<Mime>> {

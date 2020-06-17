@@ -72,7 +72,6 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 extern crate dirs;
-#[macro_use]
 extern crate nom;
 
 mod alias;
@@ -406,9 +405,9 @@ impl<'a> GuessBuilder<'a> {
                 // We don't care about the element returned by find(),
                 // because that will be the superclass of the sniffed MIME
                 // type.
-                if let Some(_) = name_mime_types
+                if name_mime_types
                     .iter()
-                    .find(|m| self.db.mime_type_subclass(&mime, m))
+                    .any(|m| self.db.mime_type_subclass(&mime, m))
                 {
                     return Guess {
                         mime,
@@ -1208,9 +1207,6 @@ mod tests {
             .metadata(ttl_meta)
             .data(ttl_data)
             .guess();
-        assert_eq!(
-            guess.mime_type(),
-            &Mime::from_str("text/turtle").unwrap()
-        );
+        assert_eq!(guess.mime_type(), &Mime::from_str("text/turtle").unwrap());
     }
 }

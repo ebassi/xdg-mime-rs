@@ -1,9 +1,10 @@
-use nom::bytes::complete::{tag, take_until};
-use nom::character::complete::line_ending;
+use nom::branch::alt;
+use nom::bytes::complete::{is_a, tag, take, take_until, take_while};
+use nom::character::complete::{char, line_ending};
 use nom::character::is_hex_digit;
-use nom::combinator::{complete, map_res};
+use nom::combinator::{map_res, opt, peek};
 use nom::multi::{many0, many1};
-use nom::number::streaming::be_u16;
+use nom::number::complete::be_u16;
 use nom::sequence::tuple;
 use nom::IResult;
 use std::fmt;
@@ -43,15 +44,8 @@ struct MagicRule {
 fn masked_slices_are_equal(a: &[u8], b: &[u8], mask: &[u8]) -> bool {
     assert!(a.len() == b.len() && a.len() == mask.len());
 
-    let masked_a = a
-        .iter()
-        .zip(mask.iter())
-        .map(|(x, m)| *x & *m);
-
-    let masked_b = b
-        .iter()
-        .zip(mask.iter())
-        .map(|(x, m)| *x & *m);
+    let masked_a = a.iter().zip(mask.iter()).map(|(x, m)| *x & *m);
+    let masked_b = b.iter().zip(mask.iter()).map(|(x, m)| *x & *m);
 
     masked_a.eq(masked_b)
 }
@@ -67,13 +61,11 @@ impl MagicRule {
         let mut data_windows = data.windows(value_len).skip(start).take(range_length);
 
         match &self.mask {
-            Some(mask) => data_windows.any(|data_w| {
-                masked_slices_are_equal(data_w, &self.value, &mask)
-            }),
+            Some(mask) => {
+                data_windows.any(|data_w| masked_slices_are_equal(data_w, &self.value, &mask))
+            }
 
-            None => data_windows.any(|data_w| {
-                data_w == &self.value[..]
-            }),
+            None => data_windows.any(|data_w| data_w == &self.value[..]),
         }
     }
 
@@ -101,68 +93,85 @@ fn start_offset(bytes: &[u8]) -> IResult<&[u8], u32> {
 }
 
 // <word_size> = '~' (0 | 1 | 2 | 4)
-named!(
-    word_size<Option<u32>>,
-    opt!(
-        do_parse!(
-            tag!("~")
-        >>  res: alt!(
-                tag!("0") | tag!("1") | tag!("2") | tag!("4")
-            )
-        >>  (buf_to_u32(res, 1))
-	)
-    )
-);
+fn word_size(bytes: &[u8]) -> IResult<&[u8], Option<u32>> {
+    let alt_size = alt((tag("0"), tag("1"), tag("2"), tag("4")));
+    let word_size = tuple((tag("~"), alt_size));
+    let (bytes, res) = opt(word_size)(bytes)?;
+
+    let size = match res {
+        Some(v) => buf_to_u32(v.1, 1),
+        None => return Ok((bytes, None)),
+    };
+
+    Ok((bytes, Some(size)))
+}
 
 // <range_length> = '+' <u32>
-named!(
-    range_length<Option<u32>>,
-    opt!(
-        do_parse!(
-            tag!("+")
-        >>  res: take_while!(is_hex_digit)
-        >>  (buf_to_u32(res, 1))
-	)
-    )
-);
+fn range_length(bytes: &[u8]) -> IResult<&[u8], Option<u32>> {
+    let range_len = tuple((tag("+"), take_while(is_hex_digit)));
+    let (bytes, res) = opt(range_len)(bytes)?;
+
+    let len = match res {
+        Some(v) => buf_to_u32(v.1, 1),
+        None => return Ok((bytes, None)),
+    };
+
+    Ok((bytes, Some(len)))
+}
 
 // magic_rule =
 // [ <indent> ] '>' <start-offset> '=' <value_length> <value>
 // [ '&' <mask> ] [ <word_size> ] [ <range_length> ]
 // '\n'
-named!(
-    magic_rule<MagicRule>,
-    do_parse!(
-        peek!(is_a!("0123456789>"))
-    >>  _indent: indent_level
-    >>  tag!(">")
-    >>  _start_offset: start_offset
-    >>  tag!("=")
-    >>  _value_length: be_u16
-    >>  _value: do_parse!(
-            res: take!(_value_length)
-        >>  (res.iter().copied().collect())
-        )
-    >>  _mask: opt!(
-            do_parse!(
-                char!('&')
-            >>  res: take!(_value_length)
-            >>  (res.iter().copied().collect())
-	    )
-        )
-    >>  _word_size: word_size
-    >>  _range_length: range_length
-    >>  line_ending
-    >>  (MagicRule {
+
+fn value(bytes: &[u8], length: u16) -> IResult<&[u8], Vec<u8>> {
+    let (bytes, res) = take(length)(bytes)?;
+
+    Ok((bytes, res.iter().copied().collect()))
+}
+
+fn mask(bytes: &[u8], length: u16) -> IResult<&[u8], Option<Vec<u8>>> {
+    let (bytes, res) = opt(tuple((char('&'), take(length))))(bytes)?;
+
+    let value = match res {
+        Some(v) => v.1.iter().copied().collect(),
+        None => return Ok((bytes, None)),
+    };
+
+    Ok((bytes, Some(value)))
+}
+
+fn magic_rule(bytes: &[u8]) -> IResult<&[u8], MagicRule> {
+    let (bytes, _) = peek(is_a("0123456789>"))(bytes)?;
+
+    let (bytes, _indent) = indent_level(bytes)?;
+
+    let (bytes, _) = tag(">")(bytes)?;
+    let (bytes, _start_offset) = start_offset(bytes)?;
+
+    let (bytes, _) = tag("=")(bytes)?;
+    let value_length = |b| be_u16(b);
+    let (bytes, _value_length) = value_length(bytes)?;
+    let (bytes, _value) = value(bytes, _value_length)?;
+    let (bytes, _mask) = mask(bytes, _value_length)?;
+
+    let (bytes, _word_size) = word_size(bytes)?;
+    let (bytes, _range_length) = range_length(bytes)?;
+
+    let (bytes, _) = line_ending(bytes)?;
+
+    Ok((
+        bytes,
+        MagicRule {
             indent: _indent,
             start_offset: _start_offset,
             value: _value,
             mask: _mask,
             word_size: _word_size.unwrap_or(1),
             range_length: _range_length.unwrap_or(1),
-        })
-    )
-);
+        },
+    ))
+}
 
 #[derive(Clone, PartialEq)]
 pub struct MagicEntry {
@@ -216,11 +225,7 @@ impl MagicEntry {
     }
 
     fn max_extents(&self) -> usize {
-        self.rules
-            .iter()
-            .map(MagicRule::extent)
-            .max()
-            .unwrap_or(0)
+        self.rules.iter().map(MagicRule::extent).max().unwrap_or(0)
     }
 }
 
@@ -231,25 +236,14 @@ fn priority(bytes: &[u8]) -> IResult<&[u8], u32> {
 }
 
 fn mime_type(bytes: &[u8]) -> IResult<&[u8], Mime> {
-    map_res(
-        map_res(
-            take_until("]\n"),
-            str::from_utf8
-        ),
-        Mime::from_str
-    )(bytes)
+    map_res(map_res(take_until("]\n"), str::from_utf8), Mime::from_str)(bytes)
 }
 
 // magic_header =
 // '[' <priority> ':' <mime_type> ']' '\n'
 fn magic_header(bytes: &[u8]) -> IResult<&[u8], (u32, Mime)> {
-    let (bytes, (_, _priority, _, _mime_type, _)) = tuple((
-        tag("["),
-        priority,
-        tag(":"),
-        mime_type,
-        tag("]\n"),
-    ))(bytes)?;
+    let (bytes, (_, _priority, _, _mime_type, _)) =
+        tuple((tag("["), priority, tag(":"), mime_type, tag("]\n")))(bytes)?;
 
     Ok((bytes, (_priority, _mime_type)))
 }
@@ -258,23 +252,20 @@ fn magic_header(bytes: &[u8]) -> IResult<&[u8], (u32, Mime)> {
 // <magic_header>
 // <magic_rule>+
 fn magic_entry(bytes: &[u8]) -> IResult<&[u8], MagicEntry> {
-    let (bytes, (_header, _rules)) = tuple((
-        magic_header,
-        many1(complete(magic_rule)),
-    ))(bytes)?;
+    let (bytes, (_header, _rules)) = tuple((magic_header, many1(magic_rule)))(bytes)?;
 
-    Ok((bytes, MagicEntry {
-        priority: _header.0,
-        mime_type: _header.1,
-        rules: _rules,
-    }))
+    Ok((
+        bytes,
+        MagicEntry {
+            priority: _header.0,
+            mime_type: _header.1,
+            rules: _rules,
+        },
+    ))
 }
 
 fn from_u8_to_entries(bytes: &[u8]) -> IResult<&[u8], Vec<MagicEntry>> {
-    let (bytes, (_, entries)) = tuple((
-        tag("MIME-Magic\0\n"),
-        many0(magic_entry),
-    ))(bytes)?;
+    let (bytes, (_, entries)) = tuple((tag("MIME-Magic\0\n"), many0(magic_entry)))(bytes)?;
 
     Ok((bytes, entries))
 }
