@@ -1,5 +1,5 @@
-[![crates.io](https://img.shields.io/crates/v/xdg_mime.svg)](https://crates.io/crates/xdg_mime)
-[![docs.rs](https://docs.rs/xdg_mime/badge.svg)](https://docs.rs/xdg_mime)
+[![crates.io](https://img.shields.io/crates/v/xdg_mime.svg)](https://crates.io/crates/xdg-mime)
+[![docs.rs](https://docs.rs/xdg-mime/badge.svg)](https://docs.rs/xdg-mime)
 ![Build](https://github.com/ebassi/xdg-mime-rs/workflows/Build/badge.svg)
 
 xdg-mime-rs
