@@ -71,7 +71,7 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-extern crate dirs;
+extern crate dirs_next;
 extern crate nom;
 
 mod alias;
@@ -546,7 +546,7 @@ impl SharedMimeInfo {
     pub fn new() -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
-        let data_home = dirs::data_dir().expect("Data directory is unset");
+        let data_home = dirs_next::data_dir().expect("Data directory is unset");
         db.load_directory(data_home);
 
         let data_dirs = match env::var_os("XDG_DATA_DIRS") {

@@ -16,7 +16,7 @@ name = "xdg_mime"
 path = "src/lib.rs"
 
 [dependencies]
-dirs = "2.0"
+dirs-next = "2.0"
 glob = "0.3.0"
 mime = "0.3"
 nom = "^5"
