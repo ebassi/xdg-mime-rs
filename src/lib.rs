@@ -822,10 +822,11 @@ impl SharedMimeInfo {
         }
 
         if let Some(parents) = self.parents.lookup(&unaliased_mime) {
-            for parent in parents {
-                if self.mime_type_subclass(parent, &unaliased_base) {
-                    return true;
-                }
+            if parents
+                .iter()
+                .any(|p| self.mime_type_subclass(p, &unaliased_base))
+            {
+                return true;
             }
         }
 
