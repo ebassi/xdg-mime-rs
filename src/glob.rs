@@ -301,7 +301,7 @@ impl fmt::Debug for GlobMap {
         let mut lines = String::new();
         for glob in &self.globs {
             lines.push_str(&format!("{:?}", glob));
-            lines.push_str("\n");
+            lines.push('\n');
         }
 
         write!(f, "Globs:\n{}", lines)
