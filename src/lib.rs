@@ -359,7 +359,7 @@ impl<'a> GuessBuilder<'a> {
         let sniffed_mime = self
             .db
             .get_mime_type_for_data(&self.data)
-            .unwrap_or_else(|| (mime::APPLICATION_OCTET_STREAM, 80));
+            .unwrap_or((mime::APPLICATION_OCTET_STREAM, 80));
 
         if name_mime_types.is_empty() {
             // No names and no data => unknown MIME type
@@ -598,7 +598,7 @@ impl SharedMimeInfo {
         // Do not reload the data if nothing has changed
         for dir in &self.mime_dirs {
             let mtime = match fs::metadata(&dir.path) {
-                Ok(v) => v.modified().unwrap_or_else(|_| dir.mtime),
+                Ok(v) => v.modified().unwrap_or(dir.mtime),
                 Err(_) => dir.mtime,
             };
 
