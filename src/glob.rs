@@ -1,11 +1,11 @@
+use std::collections::HashSet;
 use std::fmt;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::BufRead;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::hash::{Hash, Hasher};
-use std::collections::HashSet;
 
 use glob::Pattern;
 use mime::Mime;
@@ -56,12 +56,11 @@ pub struct Glob {
 
 impl PartialEq for Glob {
     fn eq(&self, other: &Glob) -> bool {
-        self.glob == other.glob &&
-        self.mime_type == other.mime_type
+        self.glob == other.glob && self.mime_type == other.mime_type
     }
 }
 
-impl Eq for Glob { }
+impl Eq for Glob {}
 
 impl Hash for Glob {
     fn hash<H: Hasher>(&self, h: &mut H) {
@@ -257,7 +256,9 @@ pub struct GlobMap {
 
 impl GlobMap {
     pub fn new() -> GlobMap {
-        GlobMap { globs: HashSet::new() }
+        GlobMap {
+            globs: HashSet::new(),
+        }
     }
 
     pub fn add_glob(&mut self, glob: Glob) {
