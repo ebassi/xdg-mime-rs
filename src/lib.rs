@@ -688,8 +688,7 @@ impl SharedMimeInfo {
             None => return None,
         };
 
-        let mut res = Vec::new();
-        res.push(unaliased.clone());
+        let mut res = vec![unaliased.clone()];
 
         if let Some(parents) = self.parents.lookup(&unaliased) {
             for parent in parents {
@@ -724,9 +723,7 @@ impl SharedMimeInfo {
         match self.globs.lookup_mime_type_for_file_name(file_name) {
             Some(v) => v,
             None => {
-                let mut res = Vec::new();
-                res.push(mime::APPLICATION_OCTET_STREAM.clone());
-                res
+                vec![mime::APPLICATION_OCTET_STREAM.clone()]
             }
         }
     }
