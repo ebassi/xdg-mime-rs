@@ -145,6 +145,7 @@ pub struct GuessBuilder<'a> {
     data: Vec<u8>,
     metadata: Option<fs::Metadata>,
     path: Option<PathBuf>,
+    zero_size: bool,
 }
 
 /// The result of the [`guess`] method of [`GuessBuilder`].
@@ -253,6 +254,20 @@ impl<'a> GuessBuilder<'a> {
         self
     }
 
+    /// Sets whether or not the [`guess`] method will return `application/x-zerosize` for empty files.
+    ///
+    /// If `allow` is set to `true`, using [`guess`] to guess the MIME types of empty files will result in `application/x-zerosize`.
+    /// Otherwise, the check for empty files will be disabled and other methods will be used to determine the MIME type.
+    /// Does not affect the results of non-empty files.
+    ///
+    /// Defaults to true.
+    ///
+    /// [`guess`]: #method.guess
+    pub fn zero_size(&mut self, allow: bool) -> &mut Self {
+        self.zero_size = allow;
+        self
+    }
+
     /// Guesses the MIME type using the data set on the builder. The result is
     /// a [`Guess`] instance that contains both the guessed MIME type, and whether
     /// the result of the guess is certain.
@@ -335,7 +350,7 @@ impl<'a> GuessBuilder<'a> {
             }
 
             // Special type for empty files
-            if metadata.len() == 0 {
+            if self.zero_size && metadata.len() == 0 {
                 return Guess {
                     mime: "application/x-zerosize".parse::<mime::Mime>().unwrap(),
                     uncertain: true,
@@ -861,6 +876,7 @@ impl SharedMimeInfo {
             data: Vec::new(),
             metadata: None,
             path: None,
+            zero_size: true,
         }
     }
 }
