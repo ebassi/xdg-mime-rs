@@ -23,13 +23,13 @@ Add the following to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-xdg-mime = "^0.3"
+xdg-mime = "^0.4"
 ```
 
 or install [`cargo-edit`][cargo-edit] and call:
 
 ```
-cargo add xdg-mime@0.3
+cargo add xdg-mime@0.4
 ```
 
 Copyright and license
