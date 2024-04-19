@@ -150,8 +150,7 @@ fn magic_rule(bytes: &[u8]) -> IResult<&[u8], MagicRule> {
     let (bytes, _start_offset) = start_offset(bytes)?;
 
     let (bytes, _) = tag("=")(bytes)?;
-    let value_length = |b| be_u16(b);
-    let (bytes, _value_length) = value_length(bytes)?;
+    let (bytes, _value_length) = be_u16(bytes)?;
     let (bytes, _value) = value(bytes, _value_length)?;
     let (bytes, _mask) = mask(bytes, _value_length)?;
 
