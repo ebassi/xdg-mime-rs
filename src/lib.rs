@@ -654,7 +654,7 @@ impl SharedMimeInfo {
             res.push(v);
         };
 
-        res.push(mime_type.essence_str().replace("/", "-"));
+        res.push(mime_type.essence_str().replace('/', "-"));
 
         match icon::find_icon(&self.generic_icons, mime_type) {
             Some(v) => res.push(v),
