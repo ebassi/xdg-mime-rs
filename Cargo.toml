@@ -19,7 +19,7 @@ path = "src/lib.rs"
 dirs-next = "2.0"
 glob = "0.3.0"
 mime = "0.3"
-nom = "^5"
+nom = "^7"
 unicase = "2.3.0"
 
 [package.metadata.docs.rs]
