@@ -127,14 +127,14 @@ fn range_length(bytes: &[u8]) -> IResult<&[u8], Option<u32>> {
 fn value(bytes: &[u8], length: u16) -> IResult<&[u8], Vec<u8>> {
     let (bytes, res) = take(length)(bytes)?;
 
-    Ok((bytes, res.iter().copied().collect()))
+    Ok((bytes, res.to_vec()))
 }
 
 fn mask(bytes: &[u8], length: u16) -> IResult<&[u8], Option<Vec<u8>>> {
     let (bytes, res) = opt(tuple((char('&'), take(length))))(bytes)?;
 
     let value = match res {
-        Some(v) => v.1.iter().copied().collect(),
+        Some(v) => v.1.to_vec(),
         None => return Ok((bytes, None)),
     };
 
