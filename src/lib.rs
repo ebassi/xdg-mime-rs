@@ -429,7 +429,7 @@ impl<'a> GuessBuilder<'a> {
 
             // If there are conflicts, and the data does not help us,
             // we just pick the first result
-            if let Some(mime_type) = name_mime_types.get(0) {
+            if let Some(mime_type) = name_mime_types.first() {
                 return Guess {
                     mime: mime_type.clone(),
                     uncertain: true,

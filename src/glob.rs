@@ -291,7 +291,7 @@ impl GlobMap {
         // Sort in descending order by weight
         matching_globs.sort_by(|a, b| b.weight.cmp(&a.weight));
 
-        let biggest_weight = matching_globs.get(0)?.weight;
+        let biggest_weight = matching_globs.first()?.weight;
 
         // "Keep only globs with the biggest weight."
         // -- shared-mime-info, "Recommended checking order"
