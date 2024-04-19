@@ -45,7 +45,7 @@ fn determine_type(glob: &str) -> GlobType {
         if idx == 0 && ch == b'*' {
             maybe_simple = true;
         } else if ch == b'\\' || ch == b'[' || ch == b'*' || ch == b'?' {
-            return GlobType::Full(Pattern::new(&glob).unwrap());
+            return GlobType::Full(Pattern::new(glob).unwrap());
         }
     }
 

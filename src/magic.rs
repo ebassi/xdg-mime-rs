@@ -62,7 +62,7 @@ impl MagicRule {
 
         match &self.mask {
             Some(mask) => {
-                data_windows.any(|data_w| masked_slices_are_equal(data_w, &self.value, &mask))
+                data_windows.any(|data_w| masked_slices_are_equal(data_w, &self.value, mask))
             }
 
             None => data_windows.any(|data_w| data_w == &self.value[..]),
@@ -194,7 +194,7 @@ impl MagicEntry {
     fn matches(&self, data: &[u8]) -> Option<(&Mime, u32)> {
         let mut current_level = 0;
 
-        let mut iter = (&self.rules).iter().peekable();
+        let mut iter = self.rules.iter().peekable();
         while let Some(rule) = iter.next() {
             // The rules are a flat list that represent a tree; the "indent"
             // is the depth of the rule in the tree.

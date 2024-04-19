@@ -262,7 +262,7 @@ impl<'a> GuessBuilder<'a> {
         if let Some(path) = &self.path {
             // Fill out the metadata
             if self.metadata.is_none() {
-                self.metadata = match fs::metadata(&path) {
+                self.metadata = match fs::metadata(path) {
                     Ok(m) => Some(m),
                     Err(_) => None,
                 };
@@ -298,7 +298,7 @@ impl<'a> GuessBuilder<'a> {
                     }
                 }
 
-                match load_data_chunk(&path, max_data_size) {
+                match load_data_chunk(path, max_data_size) {
                     Some(v) => self.data.extend(v),
                     None => self.data.clear(),
                 }
@@ -344,7 +344,7 @@ impl<'a> GuessBuilder<'a> {
         }
 
         let name_mime_types: Vec<mime::Mime> = match &self.file_name {
-            Some(file_name) => self.db.get_mime_types_from_file_name(&file_name),
+            Some(file_name) => self.db.get_mime_types_from_file_name(file_name),
             None => Vec::new(),
         };
 
@@ -856,7 +856,7 @@ impl SharedMimeInfo {
     /// [`GuessBuilder`]: struct.GuessBuilder.html
     pub fn guess_mime_type(&self) -> GuessBuilder {
         GuessBuilder {
-            db: &self,
+            db: self,
             file_name: None,
             data: Vec::new(),
             metadata: None,
