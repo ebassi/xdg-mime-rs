@@ -28,6 +28,16 @@ impl fmt::Debug for GlobType {
     }
 }
 
+impl fmt::Display for GlobType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GlobType::Literal(str) => write!(f, "{}", str),
+            GlobType::Simple(str) => write!(f, "{}", str),
+            GlobType::Full(pattern) => write!(f, "{}", pattern),
+        }
+    }
+}
+
 fn determine_type(glob: &str) -> GlobType {
     let mut maybe_simple = false;
 
@@ -278,14 +288,29 @@ impl GlobMap {
             }
         }
 
-        if matching_globs.is_empty() {
-            return None;
-        }
+        // Sort in descending order by weight
+        matching_globs.sort_by(|a, b| b.weight.cmp(&a.weight));
 
-        matching_globs.sort_by(|a, b| a.weight.cmp(&b.weight));
+        let biggest_weight = matching_globs.get(0)?.weight;
 
-        let res = matching_globs
+        // "Keep only globs with the biggest weight."
+        // -- shared-mime-info, "Recommended checking order"
+        let matching_globs = matching_globs
             .iter()
+            .filter(|glob| glob.weight == biggest_weight);
+
+        // Needs to be after filtering for biggest weight
+        // in case it changes which glob is the longest.
+        let biggest_glob_length = matching_globs
+            .clone()
+            .map(|glob| glob.glob.to_string().len())
+            .max()?;
+
+        // "If the patterns are different, keep only the globs
+        // with the longest pattern, as previously discussed."
+        // -- shared-mime-info, "Recommended checking order"
+        let res = matching_globs
+            .filter(|glob| glob.glob.to_string().len() == biggest_glob_length)
             .map(|glob| glob.mime_type.clone())
             .collect();
 
