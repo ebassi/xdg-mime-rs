@@ -992,6 +992,11 @@ mod tests {
             mime_db.get_mime_types_from_file_name("bar.gif"),
             vec![Mime::from_str("image/gif").unwrap()]
         );
+
+        assert_eq!(
+            mime_db.get_mime_types_from_file_name("baz.mod"),
+            vec![Mime::from_str("audio/x-mod").unwrap()]
+        );
     }
 
     #[test]
@@ -1233,5 +1238,15 @@ mod tests {
             .data(desktop_data)
             .guess();
         assert_eq!(guess.mime_type(), &Mime::from_str("text/plain").unwrap());
+    }
+
+    #[test]
+    fn guess_html_with_no_html_tags() {
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let file = PathBuf::from(&format!("{}/test_files/files/no_html_tags.html", cwd));
+        let guess = gb.path(file).guess();
+        assert_eq!(guess.mime_type(), &mime::TEXT_HTML);
     }
 }
