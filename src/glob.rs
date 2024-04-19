@@ -282,7 +282,8 @@ impl GlobMap {
             return None;
         }
 
-        matching_globs.sort_by(|a, b| a.weight.cmp(&b.weight));
+        // Sort in descending order by weight
+        matching_globs.sort_by(|a, b| b.weight.cmp(&a.weight));
 
         let res = matching_globs
             .iter()
