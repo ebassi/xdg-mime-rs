@@ -1207,6 +1207,26 @@ mod tests {
     }
 
     #[test]
+    fn guess_empty_no_zero_size() {
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let file = PathBuf::from(&format!("{}/test_files/files/empty.json", cwd));
+        let guess = gb.path(file.clone()).guess();
+        assert_ne!(guess.mime_type(), &mime::APPLICATION_JSON);
+        assert_eq!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-zerosize").unwrap()
+        );
+        let guess = gb.path(file).zero_size(false).guess();
+        assert_ne!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-zerosize").unwrap()
+        );
+        assert_eq!(guess.mime_type(), &mime::APPLICATION_JSON);
+    }
+
+    #[test]
     fn guess_text() {
         let mime_db = load_test_data();
         let mut gb = mime_db.guess_mime_type();
