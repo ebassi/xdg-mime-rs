@@ -145,6 +145,7 @@ pub struct GuessBuilder<'a> {
     data: Vec<u8>,
     metadata: Option<fs::Metadata>,
     path: Option<PathBuf>,
+    zero_size: bool,
 }
 
 /// The result of the [`guess`] method of [`GuessBuilder`].
@@ -253,6 +254,20 @@ impl<'a> GuessBuilder<'a> {
         self
     }
 
+    /// Sets whether or not the [`guess`] method will return `application/x-zerosize` for empty files.
+    ///
+    /// If `allow` is set to `true`, using [`guess`] to guess the MIME types of empty files will result in `application/x-zerosize`.
+    /// Otherwise, the check for empty files will be disabled and other methods will be used to determine the MIME type.
+    /// Does not affect the results of non-empty files.
+    ///
+    /// Defaults to true.
+    ///
+    /// [`guess`]: #method.guess
+    pub fn zero_size(&mut self, allow: bool) -> &mut Self {
+        self.zero_size = allow;
+        self
+    }
+
     /// Guesses the MIME type using the data set on the builder. The result is
     /// a [`Guess`] instance that contains both the guessed MIME type, and whether
     /// the result of the guess is certain.
@@ -335,7 +350,7 @@ impl<'a> GuessBuilder<'a> {
             }
 
             // Special type for empty files
-            if metadata.len() == 0 {
+            if self.zero_size && metadata.len() == 0 {
                 return Guess {
                     mime: "application/x-zerosize".parse::<mime::Mime>().unwrap(),
                     uncertain: true,
@@ -861,6 +876,7 @@ impl SharedMimeInfo {
             data: Vec::new(),
             metadata: None,
             path: None,
+            zero_size: true,
         }
     }
 }
@@ -1184,6 +1200,45 @@ mod tests {
         let file = PathBuf::from(&format!("{}/test_files/files/empty", cwd));
         let guess = gb.path(file).guess();
         assert_ne!(guess.mime_type(), &mime::TEXT_PLAIN);
+        assert_eq!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-zerosize").unwrap()
+        );
+    }
+
+    #[test]
+    fn guess_empty_no_zero_size() {
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let file = PathBuf::from(&format!("{}/test_files/files/empty.json", cwd));
+        let guess = gb.path(file.clone()).guess();
+        assert_ne!(guess.mime_type(), &mime::APPLICATION_JSON);
+        assert_eq!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-zerosize").unwrap()
+        );
+        let guess = gb.path(file).zero_size(false).guess();
+        assert_ne!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-zerosize").unwrap()
+        );
+        assert_eq!(guess.mime_type(), &mime::APPLICATION_JSON);
+    }
+
+    #[test]
+    fn guess_empty_no_zero_size_no_extension() {
+        let mime_db = load_test_data();
+        let mut gb = mime_db.guess_mime_type();
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let file = PathBuf::from(&format!("{}/test_files/files/empty", cwd));
+        let guess = gb.path(file.clone()).guess();
+        assert_eq!(
+            guess.mime_type(),
+            &Mime::from_str("application/x-zerosize").unwrap()
+        );
+        let guess = gb.path(file).zero_size(false).guess();
+        // Return `application/x-zerosize` even if `zero_size` is false
         assert_eq!(
             guess.mime_type(),
             &Mime::from_str("application/x-zerosize").unwrap()
