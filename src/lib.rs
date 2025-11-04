@@ -71,7 +71,6 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-extern crate dirs_next;
 extern crate nom;
 
 mod alias;
@@ -561,19 +560,32 @@ impl SharedMimeInfo {
     pub fn new() -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
-        let data_home = dirs_next::data_dir().expect("Data directory is unset");
+        let home_dir = env::home_dir();
+        let data_home = env::var_os("XDG_DATA_HOME")
+            .and_then(|path| {
+                let path = PathBuf::from(path);
+                path.is_absolute().then_some(path)
+            })
+            .or_else(|| {
+                home_dir.map(|mut home_dir| {
+                    home_dir.push(".local/share");
+                    home_dir
+                })
+            })
+            .expect("Expected XDG_DATA_HOME or HOME to be set");
         db.load_directory(data_home);
 
-        let data_dirs = match env::var_os("XDG_DATA_DIRS") {
-            Some(v) => env::split_paths(&v).collect(),
-            None => vec![
-                PathBuf::from("/usr/local/share"),
-                PathBuf::from("/usr/share"),
-            ],
-        };
+        let mut loaded_data_dirs = false;
+        if let Some(paths) = env::var_os("XDG_DATA_DIRS") {
+            for path in env::split_paths(&paths).filter(|p| p.is_absolute()) {
+                db.load_directory(path);
+                loaded_data_dirs = true;
+            }
+        }
 
-        for dir in data_dirs {
-            db.load_directory(dir)
+        if !loaded_data_dirs {
+            db.load_directory("/usr/local/share");
+            db.load_directory("/usr/share");
         }
 
         db
