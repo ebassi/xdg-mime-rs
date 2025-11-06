@@ -1,3 +1,4 @@
+use memchr::memmem::Finder;
 use nom::branch::alt;
 use nom::bytes::complete::{is_a, tag, take, take_until, take_while};
 use nom::character::complete::{char, line_ending};
@@ -31,14 +32,26 @@ pub fn buf_to_u32(s: &[u8], or_default: u32) -> u32 {
     to_u32(to_string(s), or_default)
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 struct MagicRule {
     indent: u32,
     start_offset: u32,
-    value: Vec<u8>,
+    finder: Finder<'static>,
     mask: Option<Vec<u8>>,
     word_size: u32,
     range_length: u32,
+}
+
+// Since `Finder` doesn't impl PartialEq, need a manual implementation
+impl PartialEq for MagicRule {
+    fn eq(&self, other: &Self) -> bool {
+        self.indent == other.indent
+            && self.start_offset == other.start_offset
+            && *self.value() == *other.value()
+            && self.mask == other.mask
+            && self.word_size == other.word_size
+            && self.range_length == other.range_length
+    }
 }
 
 fn masked_slices_are_equal(a: &[u8], b: &[u8], mask: &[u8]) -> bool {
@@ -51,26 +64,39 @@ fn masked_slices_are_equal(a: &[u8], b: &[u8], mask: &[u8]) -> bool {
 }
 
 impl MagicRule {
+    #[inline]
+    fn value(&self) -> &[u8] {
+        self.finder.needle()
+    }
+
+    #[inline]
+    fn value_len(&self) -> usize {
+        self.value().len()
+    }
+
     fn matches_data(&self, data: &[u8]) -> bool {
-        assert!(self.mask.is_none() || self.mask.as_ref().unwrap().len() == self.value.len());
+        assert!(self.mask.is_none() || self.mask.as_ref().unwrap().len() == self.value_len());
 
         let start = self.start_offset as usize;
         let range_length = self.range_length as usize;
-        let value_len = self.value.len();
-
-        let mut data_windows = data.windows(value_len).skip(start).take(range_length);
+        let value_len = self.value_len();
 
         match &self.mask {
             Some(mask) => {
-                data_windows.any(|data_w| masked_slices_are_equal(data_w, &self.value, mask))
+                let mut data_windows = data.windows(value_len).skip(start).take(range_length);
+                data_windows.any(|data_w| masked_slices_are_equal(data_w, self.value(), mask))
             }
 
-            None => data_windows.any(|data_w| data_w == &self.value[..]),
+            None => {
+                let end = (start + value_len + range_length - 1).min(data.len());
+                let start = start.min(end);
+                self.finder.find(&data[start..end]).is_some()
+            }
         }
     }
 
     fn extent(&self) -> usize {
-        let value_len = self.value.len();
+        let value_len = self.value_len();
         let offset = self.start_offset as usize;
         let range_len = self.range_length as usize;
 
@@ -124,10 +150,11 @@ fn range_length(bytes: &[u8]) -> IResult<&[u8], Option<u32>> {
 // [ '&' <mask> ] [ <word_size> ] [ <range_length> ]
 // '\n'
 
-fn value(bytes: &[u8], length: u16) -> IResult<&[u8], Vec<u8>> {
+fn finder(bytes: &[u8], length: u16) -> IResult<&[u8], Finder<'static>> {
     let (bytes, res) = take(length)(bytes)?;
+    let finder = Finder::new(res);
 
-    Ok((bytes, res.to_vec()))
+    Ok((bytes, finder.into_owned()))
 }
 
 fn mask(bytes: &[u8], length: u16) -> IResult<&[u8], Option<Vec<u8>>> {
@@ -151,7 +178,7 @@ fn magic_rule(bytes: &[u8]) -> IResult<&[u8], MagicRule> {
 
     let (bytes, _) = tag("=")(bytes)?;
     let (bytes, _value_length) = be_u16(bytes)?;
-    let (bytes, _value) = value(bytes, _value_length)?;
+    let (bytes, _finder) = finder(bytes, _value_length)?;
     let (bytes, _mask) = mask(bytes, _value_length)?;
 
     let (bytes, _word_size) = word_size(bytes)?;
@@ -164,7 +191,7 @@ fn magic_rule(bytes: &[u8]) -> IResult<&[u8], MagicRule> {
         MagicRule {
             indent: _indent,
             start_offset: _start_offset,
-            value: _value,
+            finder: _finder,
             mask: _mask,
             word_size: _word_size.unwrap_or(1),
             range_length: _range_length.unwrap_or(1),
@@ -435,7 +462,7 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 0,
-            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            finder: Finder::new(b"hello"),
             mask: None,
             word_size: 1,
             range_length: 30,
@@ -450,7 +477,7 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 1,
-            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            finder: Finder::new(b"hello"),
             mask: None,
             word_size: 1,
             range_length: 30,
@@ -466,7 +493,7 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 0,
-            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            finder: Finder::new(b"hello"),
             mask: None,
             word_size: 1,
             range_length: 10,
@@ -484,7 +511,7 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 1,
-            value: vec!['h' as u8, 'e' as u8, 'l' as u8, 'l' as u8, 'o' as u8],
+            finder: Finder::new(b"hello"),
             mask: None,
             word_size: 1,
             range_length: 3,
@@ -502,7 +529,7 @@ mod tests {
         let rule = MagicRule {
             indent: 0,
             start_offset: 0,
-            value: vec!['h' as u8, 'E' as u8, 'l' as u8, 'l' as u8, 'O' as u8],
+            finder: Finder::new(b"hello"),
             mask: Some(vec![!0x20; 5]),
             word_size: 1,
             range_length: 30,
