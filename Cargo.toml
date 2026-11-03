@@ -20,6 +20,7 @@ dirs-next = "2.0"
 glob = "0.3.0"
 mime = "0.3"
 nom = "^7"
+roxmltree = "0.21"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"

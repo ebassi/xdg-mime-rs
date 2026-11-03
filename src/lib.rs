@@ -64,18 +64,20 @@
 //! [`guess`]: struct.GuessBuilder.html#method.guess
 
 use mime::Mime;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::SystemTime;
 
 extern crate dirs_next;
 extern crate nom;
 
 mod alias;
+mod description;
 mod glob;
 mod icon;
 mod magic;
@@ -123,6 +125,7 @@ pub struct SharedMimeInfo {
     magic: Vec<magic::MagicEntry>,
     disabled_magic: HashSet<Mime>,
     mime_dirs: Vec<MimeDirectory>,
+    descriptions: Mutex<HashMap<Mime, description::Comments>>,
 }
 
 /// A builder type to specify the parameters for guessing a MIME type.
@@ -523,6 +526,7 @@ impl SharedMimeInfo {
             magic: Vec::new(),
             disabled_magic: HashSet::new(),
             mime_dirs: Vec::new(),
+            descriptions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -639,6 +643,31 @@ impl SharedMimeInfo {
     /// Retrieves the MIME type aliased by a MIME type, if any.
     pub fn unalias_mime_type(&self, mime_type: &Mime) -> Option<Mime> {
         self.aliases.unalias_mime_type(mime_type)
+    }
+
+    /// Returns the human-readable comment for a MIME type, following aliases.
+    ///
+    /// `languages` lists preferred locales in order, for example `["fr_CA", "en"]`.
+    /// Territory, encoding and modifier fallbacks are supported. If no translation
+    /// matches, the untagged comment is returned; `C` and `POSIX` request that
+    /// fallback immediately. Returns `None` when no description is installed.
+    ///
+    /// Generated per-type XML files are loaded lazily and cached until [`reload`].
+    /// Higher-precedence directories override comments for the same language.
+    ///
+    /// [`reload`]: Self::reload
+    pub fn lookup_description(&self, mime_type: &Mime, languages: &[&str]) -> Option<String> {
+        let canonical = self
+            .unalias_mime_type(mime_type)
+            .unwrap_or_else(|| mime_type.clone());
+        let mut descriptions = self.descriptions.lock().unwrap_or_else(|e| e.into_inner());
+        let comments = descriptions.entry(canonical.clone()).or_insert_with(|| {
+            description::load(
+                self.mime_dirs.iter().map(|dir| dir.path.clone()),
+                &canonical,
+            )
+        });
+        description::lookup(comments, languages)
     }
 
     /// Looks up the icons associated to a MIME type.
