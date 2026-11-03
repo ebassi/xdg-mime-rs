@@ -66,6 +66,7 @@ fn determine_type(glob: &str) -> GlobType {
 #[derive(Clone)]
 pub struct Glob {
     glob: GlobType,
+    original: String,
     weight: i32,
     case_sensitive: bool,
     mime_type: Mime,
@@ -74,9 +75,7 @@ pub struct Glob {
 
 impl PartialEq for Glob {
     fn eq(&self, other: &Glob) -> bool {
-        self.glob == other.glob
-            && self.mime_type == other.mime_type
-            && self.case_sensitive == other.case_sensitive
+        self.original == other.original && self.mime_type == other.mime_type
     }
 }
 
@@ -84,9 +83,8 @@ impl Eq for Glob {}
 
 impl Hash for Glob {
     fn hash<H: Hasher>(&self, h: &mut H) {
-        self.glob.hash(h);
-        self.mime_type.hash(h);
-        self.case_sensitive.hash(h)
+        self.original.hash(h);
+        self.mime_type.hash(h)
     }
 }
 
@@ -119,6 +117,7 @@ impl Glob {
         };
         Glob {
             mime_type: mime_type.clone(),
+            original: glob.to_owned(),
             glob: pattern,
             weight,
             case_sensitive: cs,
@@ -428,6 +427,24 @@ mod tests {
         assert_eq!(
             map.lookup_mime_type_for_file_name("x.abc"),
             Some(vec![mime::IMAGE_PNG, mime::TEXT_PLAIN])
+        );
+    }
+
+    #[test]
+    fn first_definition_keeps_its_weight_and_case_flags() {
+        let mut map = GlobMap::new();
+        // update-mime-database can emit a case-sensitive literal followed
+        // by the same literal without flags. Keep the first definition,
+        // just as for a pattern repeated in a lower-precedence directory.
+        map.add_globs(&rules(&["50:text/plain:Case:cs", "50:text/plain:Case"]));
+        map.add_globs(&rules(&["90:text/plain:Case", "80:image/png:case*"]));
+        assert_eq!(
+            map.lookup_mime_type_for_file_name("Case"),
+            Some(vec![mime::TEXT_PLAIN])
+        );
+        assert_eq!(
+            map.lookup_mime_type_for_file_name("CASE"),
+            Some(vec![mime::IMAGE_PNG])
         );
     }
 
