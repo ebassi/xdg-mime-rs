@@ -84,7 +84,33 @@ mod parent;
 #[derive(Clone, PartialEq)]
 struct MimeDirectory {
     path: PathBuf,
-    mtime: SystemTime,
+    // Watching only the directory misses in-place writes to existing files.
+    stamps: Vec<Option<(SystemTime, u64)>>,
+}
+
+impl MimeDirectory {
+    fn new(path: PathBuf) -> Self {
+        let stamps = [
+            "",
+            "globs2",
+            "globs",
+            "magic",
+            "aliases",
+            "subclasses",
+            "icons",
+            "generic-icons",
+            "types",
+            "mime.cache",
+        ]
+        .iter()
+        .map(|name| {
+            fs::metadata(path.join(name))
+                .ok()
+                .and_then(|m| m.modified().ok().map(|time| (time, m.len())))
+        })
+        .collect();
+        Self { path, stamps }
+    }
 }
 
 /// The shared MIME info database.
@@ -523,22 +549,7 @@ impl SharedMimeInfo {
         let magic_entries = magic::read_magic_from_dir(&mime_path);
         magic::add_entries(&mut self.magic, &mut self.disabled_magic, magic_entries);
 
-        let mime_dir = match fs::metadata(&mime_path) {
-            Ok(v) => {
-                let mtime = v.modified().unwrap_or_else(|_| SystemTime::now());
-
-                MimeDirectory {
-                    path: mime_path,
-                    mtime,
-                }
-            }
-            Err(_) => MimeDirectory {
-                path: mime_path,
-                mtime: SystemTime::now(),
-            },
-        };
-
-        self.mime_dirs.push(mime_dir);
+        self.mime_dirs.push(MimeDirectory::new(mime_path));
     }
 
     /// Creates a new `SharedMimeInfo` instance containing all MIME information
@@ -548,8 +559,9 @@ impl SharedMimeInfo {
     pub fn new() -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
-        let data_home = dirs_next::data_dir().expect("Data directory is unset");
-        db.load_directory(data_home);
+        if let Some(data_home) = dirs_next::data_dir() {
+            db.load_directory(data_home);
+        }
 
         let data_dirs = match env::var_os("XDG_DATA_DIRS") {
             Some(v) => env::split_paths(&v).collect(),
@@ -575,10 +587,24 @@ impl SharedMimeInfo {
     /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
     /// [`new`]: #method.new
     pub fn new_for_directory<P: AsRef<Path>>(directory: P) -> SharedMimeInfo {
+        Self::new_for_directories([directory])
+    }
+
+    /// Loads MIME databases from the supplied XDG data directories, in
+    /// descending precedence (user directories before system directories).
+    /// Each directory must contain a `mime` subdirectory.
+    ///
+    /// This allows applications and tests to use isolated databases without
+    /// changing process-wide environment variables.
+    pub fn new_for_directories<I, P>(directories: I) -> SharedMimeInfo
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
         let mut db = SharedMimeInfo::create();
-
-        db.load_directory(directory);
-
+        for directory in directories {
+            db.load_directory(directory);
+        }
         db
     }
 
@@ -595,49 +621,19 @@ impl SharedMimeInfo {
     ///
     /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
     pub fn reload(&mut self) -> bool {
-        let mut dropped_db = false;
-
-        // Do not reload the data if nothing has changed
-        for dir in &self.mime_dirs {
-            let mtime = match fs::metadata(&dir.path) {
-                Ok(v) => v.modified().unwrap_or(dir.mtime),
-                Err(_) => dir.mtime,
-            };
-
-            // Drop everything if a directory was changed since
-            // the last time we looked into it
-            if dir.mtime < mtime {
-                dropped_db = true;
-
-                self.aliases.clear();
-                self.parents.clear();
-                self.globs.clear();
-                self.icons.clear();
-                self.generic_icons.clear();
-                self.magic.clear();
-                self.disabled_magic.clear();
-
-                break;
-            }
+        let changed = self
+            .mime_dirs
+            .iter()
+            .any(|dir| *dir != MimeDirectory::new(dir.path.clone()));
+        if changed {
+            let dirs: Vec<_> = self
+                .mime_dirs
+                .iter()
+                .filter_map(|dir| dir.path.parent().map(Path::to_path_buf))
+                .collect();
+            *self = Self::new_for_directories(dirs);
         }
-
-        if dropped_db {
-            let mime_dirs: Vec<MimeDirectory> = self.mime_dirs.to_vec();
-
-            self.mime_dirs.clear();
-
-            for dir in &mime_dirs {
-                // Pop the `mime` chunk, since load_directory() will
-                // automatically add it back
-                let mut base_dir = PathBuf::new();
-                base_dir.push(&dir.path);
-                base_dir.pop();
-
-                self.load_directory(base_dir);
-            }
-        }
-
-        dropped_db
+        changed
     }
 
     /// Retrieves the MIME type aliased by a MIME type, if any.
