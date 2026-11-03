@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
@@ -9,13 +9,14 @@ use std::str::FromStr;
 
 use glob::Pattern;
 use mime::Mime;
-use unicase::UniCase;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum GlobType {
     Literal(String),
     Simple(String),
     Full(Pattern),
+    Invalid(String),
+    DeleteAll,
 }
 
 impl fmt::Debug for GlobType {
@@ -24,6 +25,8 @@ impl fmt::Debug for GlobType {
             GlobType::Literal(name) => write!(f, "Literal '{}'", name),
             GlobType::Simple(pattern) => write!(f, "Simple glob '*{}'", pattern),
             GlobType::Full(pattern) => write!(f, "Full glob '{}'", pattern),
+            GlobType::Invalid(pattern) => write!(f, "Invalid glob '{}'", pattern),
+            GlobType::DeleteAll => write!(f, "Delete all globs"),
         }
     }
 }
@@ -34,6 +37,8 @@ impl fmt::Display for GlobType {
             GlobType::Literal(str) => write!(f, "{}", str),
             GlobType::Simple(str) => write!(f, "{}", str),
             GlobType::Full(pattern) => write!(f, "{}", pattern),
+            GlobType::Invalid(pattern) => write!(f, "{}", pattern),
+            GlobType::DeleteAll => write!(f, "__NOGLOBS__"),
         }
     }
 }
@@ -45,7 +50,9 @@ fn determine_type(glob: &str) -> GlobType {
         if idx == 0 && ch == b'*' {
             maybe_simple = true;
         } else if ch == b'\\' || ch == b'[' || ch == b'*' || ch == b'?' {
-            return GlobType::Full(Pattern::new(glob).unwrap());
+            return Pattern::new(glob)
+                .map(GlobType::Full)
+                .unwrap_or_else(|_| GlobType::Invalid(glob.to_owned()));
         }
     }
 
@@ -62,11 +69,14 @@ pub struct Glob {
     weight: i32,
     case_sensitive: bool,
     mime_type: Mime,
+    length: usize,
 }
 
 impl PartialEq for Glob {
     fn eq(&self, other: &Glob) -> bool {
-        self.glob == other.glob && self.mime_type == other.mime_type
+        self.glob == other.glob
+            && self.mime_type == other.mime_type
+            && self.case_sensitive == other.case_sensitive
     }
 }
 
@@ -75,7 +85,8 @@ impl Eq for Glob {}
 impl Hash for Glob {
     fn hash<H: Hasher>(&self, h: &mut H) {
         self.glob.hash(h);
-        self.mime_type.hash(h)
+        self.mime_type.hash(h);
+        self.case_sensitive.hash(h)
     }
 }
 
@@ -91,29 +102,27 @@ impl fmt::Debug for Glob {
 
 impl Glob {
     pub fn simple(mime_type: &Mime, glob: &str) -> Glob {
-        Glob {
-            mime_type: mime_type.clone(),
-            glob: determine_type(glob),
-            weight: 50,
-            case_sensitive: false,
-        }
+        Self::new(mime_type, glob, 50, false)
     }
 
     pub fn with_weight(mime_type: &Mime, glob: &str, weight: i32) -> Glob {
-        Glob {
-            mime_type: mime_type.clone(),
-            glob: determine_type(glob),
-            weight,
-            case_sensitive: false,
-        }
+        Self::new(mime_type, glob, weight, false)
     }
 
     pub fn new(mime_type: &Mime, glob: &str, weight: i32, cs: bool) -> Glob {
+        let pattern = if glob == "__NOGLOBS__" {
+            GlobType::DeleteAll
+        } else if cs {
+            determine_type(glob)
+        } else {
+            determine_type(&glob.to_lowercase())
+        };
         Glob {
             mime_type: mime_type.clone(),
-            glob: determine_type(glob),
+            glob: pattern,
             weight,
             case_sensitive: cs,
+            length: glob.len(),
         }
     }
 
@@ -128,7 +137,8 @@ impl Glob {
             return None;
         }
 
-        Some(Glob::new(&mime_type, glob, 50, false))
+        let glob = Glob::new(&mime_type, glob, 50, false);
+        (!matches!(glob.glob, GlobType::Invalid(_))).then_some(glob)
     }
 
     pub fn from_v2_string(s: &str) -> Option<Glob> {
@@ -140,7 +150,7 @@ impl Glob {
             .filter(|n| *n >= 0)?;
 
         let mime_type = chunks.next().and_then(|s| Mime::from_str(s).ok())?;
-        let glob = chunks.next()?;
+        let glob = chunks.next().filter(|s| !s.is_empty())?;
 
         let mut case_sensitive = false;
         if let Some(flags) = chunks.next() {
@@ -156,35 +166,25 @@ impl Glob {
         //
         // https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#idm46152099256048
 
-        Some(Glob::new(&mime_type, glob, weight, case_sensitive))
+        let glob = Glob::new(&mime_type, glob, weight, case_sensitive);
+        (!matches!(glob.glob, GlobType::Invalid(_))).then_some(glob)
     }
 
     fn compare(&self, file_name: &str) -> bool {
-        match &self.glob {
-            GlobType::Literal(s) => {
-                let a = UniCase::new(s);
-                let b = UniCase::new(file_name);
-
-                return a == b;
-            }
-            GlobType::Simple(s) => {
-                if file_name.ends_with(s) {
-                    return true;
-                }
-
-                if !self.case_sensitive {
-                    let lc_file_name = file_name.to_lowercase();
-                    if lc_file_name.ends_with(s) {
-                        return true;
-                    }
-                }
-            }
-            GlobType::Full(p) => {
-                return p.matches(file_name);
-            }
+        if self.case_sensitive {
+            self.compare_normalized(file_name)
+        } else {
+            self.compare_normalized(&file_name.to_lowercase())
         }
+    }
 
-        false
+    fn compare_normalized(&self, file_name: &str) -> bool {
+        match &self.glob {
+            GlobType::Literal(s) => s == file_name,
+            GlobType::Simple(s) => file_name.ends_with(s),
+            GlobType::Full(p) => p.matches(file_name),
+            GlobType::Invalid(_) | GlobType::DeleteAll => false,
+        }
     }
 }
 
@@ -260,83 +260,176 @@ pub fn read_globs_from_dir<P: AsRef<Path>>(dir: P) -> Vec<Glob> {
     }
 }
 
+#[derive(Default)]
 pub struct GlobMap {
     globs: HashSet<Glob>,
+    literals: HashMap<String, Vec<Glob>>,
+    suffixes: HashMap<String, Vec<Glob>>,
+    full: Vec<Glob>,
+    disabled: HashSet<Mime>,
 }
 
 impl GlobMap {
     pub fn new() -> GlobMap {
-        GlobMap {
-            globs: HashSet::new(),
-        }
+        Self::default()
     }
 
     pub fn add_glob(&mut self, glob: Glob) {
-        self.globs.insert(glob);
+        if self.disabled.contains(&glob.mime_type) || !self.globs.insert(glob.clone()) {
+            return;
+        }
+        match &glob.glob {
+            GlobType::Literal(s) => self.literals.entry(s.clone()).or_default().push(glob),
+            GlobType::Simple(s) => self.suffixes.entry(s.clone()).or_default().push(glob),
+            GlobType::Full(_) => self.full.push(glob),
+            GlobType::Invalid(_) | GlobType::DeleteAll => (),
+        }
     }
 
+    // Each batch belongs to one directory, in descending XDG precedence.
+    // Activate markers after adding this directory's replacement patterns.
     pub fn add_globs(&mut self, globs: &[Glob]) {
-        self.globs.extend(globs.iter().cloned());
+        for glob in globs {
+            self.add_glob(glob.clone());
+        }
+        for glob in globs {
+            if matches!(glob.glob, GlobType::DeleteAll) {
+                self.disabled.insert(glob.mime_type.clone());
+            }
+        }
     }
 
     pub fn lookup_mime_type_for_file_name(&self, file_name: &str) -> Option<Vec<Mime>> {
-        let mut matching_globs = Vec::new();
-
-        for glob in &self.globs {
-            if glob.compare(file_name) {
-                matching_globs.push(glob.clone());
+        let folded = file_name.to_lowercase();
+        let mut matches = Vec::new();
+        for (name, cs) in [(file_name, true), (folded.as_str(), false)] {
+            if let Some(globs) = self.literals.get(name) {
+                matches.extend(globs.iter().filter(|g| g.case_sensitive == cs));
             }
         }
-
-        // Sort in descending order by weight
-        matching_globs.sort_by(|a, b| b.weight.cmp(&a.weight));
-
-        let biggest_weight = matching_globs.first()?.weight;
-
-        // "Keep only globs with the biggest weight."
-        // -- shared-mime-info, "Recommended checking order"
-        let matching_globs = matching_globs
-            .iter()
-            .filter(|glob| glob.weight == biggest_weight);
-
-        // Needs to be after filtering for biggest weight
-        // in case it changes which glob is the longest.
-        let biggest_glob_length = matching_globs
-            .clone()
-            .map(|glob| glob.glob.to_string().len())
-            .max()?;
-
-        // "If the patterns are different, keep only the globs
-        // with the longest pattern, as previously discussed."
-        // -- shared-mime-info, "Recommended checking order"
-        let res = matching_globs
-            .filter(|glob| glob.glob.to_string().len() == biggest_glob_length)
-            .map(|glob| glob.mime_type.clone())
+        // Literal patterns take precedence over wildcard patterns.
+        if matches.is_empty() {
+            for (name, cs) in [(file_name, true), (folded.as_str(), false)] {
+                for offset in name.char_indices().map(|(i, _)| i).chain([name.len()]) {
+                    if let Some(globs) = self.suffixes.get(&name[offset..]) {
+                        matches.extend(globs.iter().filter(|g| g.case_sensitive == cs));
+                    }
+                }
+            }
+            matches.extend(self.full.iter().filter(|g| {
+                g.compare_normalized(if g.case_sensitive { file_name } else { &folded })
+            }));
+        }
+        let best = matches.iter().map(|g| (g.weight, g.length)).max()?;
+        let mut types: Vec<_> = matches
+            .into_iter()
+            .filter(|g| (g.weight, g.length) == best)
+            .map(|g| g.mime_type.clone())
             .collect();
-
-        Some(res)
+        // Overlapping patterns can name the same type. Stable ordering also
+        // makes an ambiguous guess independent of HashSet iteration order.
+        types.sort();
+        types.dedup();
+        Some(types)
     }
 
     pub fn clear(&mut self) {
-        self.globs.clear();
+        *self = Self::new();
     }
 }
 
 impl fmt::Debug for GlobMap {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut lines = String::new();
-        for glob in &self.globs {
-            lines.push_str(&format!("{:?}", glob));
-            lines.push('\n');
-        }
-
-        write!(f, "Globs:\n{}", lines)
+        f.debug_set().entries(&self.globs).finish()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rules(lines: &[&str]) -> Vec<Glob> {
+        lines
+            .iter()
+            .filter_map(|line| Glob::from_v2_string(line))
+            .collect()
+    }
+
+    #[test]
+    fn overrides_only_remove_lower_priority_patterns() {
+        let mut map = GlobMap::new();
+        map.add_globs(&rules(&["50:text/plain:*.highest"]));
+        map.add_globs(&rules(&[
+            "0:text/plain:__NOGLOBS__",
+            "50:text/plain:*.replacement",
+            "0:image/png:__NOGLOBS__",
+        ]));
+        map.add_globs(&rules(&[
+            "50:text/plain:README",
+            "50:text/plain:*.old",
+            "50:text/plain:old-*.txt",
+            "50:image/png:*.png",
+            "50:application/pdf:README",
+        ]));
+        for name in ["x.highest", "x.replacement"] {
+            assert_eq!(
+                map.lookup_mime_type_for_file_name(name),
+                Some(vec![mime::TEXT_PLAIN])
+            );
+        }
+        for name in ["x.old", "old-report.txt", "x.png", "__NOGLOBS__"] {
+            assert_eq!(map.lookup_mime_type_for_file_name(name), None, "{name}");
+        }
+        assert_eq!(
+            map.lookup_mime_type_for_file_name("README"),
+            Some(vec![mime::APPLICATION_PDF])
+        );
+        map.clear();
+        map.add_globs(&rules(&["50:text/plain:*.old"]));
+        assert!(map.lookup_mime_type_for_file_name("x.old").is_some());
+    }
+
+    #[test]
+    fn all_pattern_kinds_respect_case_and_malformed_patterns_are_skipped() {
+        for pattern in ["ExactCase", "*.UPPER", "REPORT-*.TXT", "猫-?.TXT"] {
+            let name = pattern.replace('*', "file").replace('?', "字");
+            let cs = Glob::new(&mime::TEXT_PLAIN, pattern, 50, true);
+            let ci = Glob::new(&mime::TEXT_PLAIN, pattern, 50, false);
+            assert!(cs.compare(&name));
+            assert!(!cs.compare(&name.to_lowercase()));
+            assert!(ci.compare(&name));
+            assert!(ci.compare(&name.to_lowercase()));
+        }
+        assert!(Glob::from_v2_string("50:text/plain:[").is_none());
+        assert!(Glob::from_v1_string("text/plain:[").is_none());
+        assert!(Glob::from_v2_string("50:text/plain:").is_none());
+    }
+
+    #[test]
+    fn literal_precedence_weight_length_and_unique_stable_results() {
+        let mut map = GlobMap::new();
+        map.add_globs(&rules(&[
+            "10:text/plain:README",
+            "90:image/png:R*",
+            "80:application/gzip:*.gz",
+            "20:application/x-tar:*.tar.gz",
+            "50:text/plain:*.abc",
+            "50:text/plain:*.a?c",
+            "50:image/png:*.abc",
+        ]));
+        assert_eq!(
+            map.lookup_mime_type_for_file_name("README"),
+            Some(vec![mime::TEXT_PLAIN])
+        );
+        assert_eq!(
+            map.lookup_mime_type_for_file_name("x.tar.gz"),
+            Some(vec!["application/gzip".parse().unwrap()])
+        );
+        assert_eq!(
+            map.lookup_mime_type_for_file_name("x.abc"),
+            Some(vec![mime::IMAGE_PNG, mime::TEXT_PLAIN])
+        );
+    }
 
     #[test]
     fn glob_type() {
