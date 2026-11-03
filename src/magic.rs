@@ -224,10 +224,10 @@ impl MagicEntry {
             ancestors.truncate(depth);
             let matched = (depth == 0 || ancestors[depth - 1]) && rule.matches_data(data);
             ancestors.push(matched);
-            let leaf = self
-                .rules
-                .get(index + 1)
-                .map_or(true, |next| next.indent <= rule.indent);
+            let leaf = match self.rules.get(index + 1) {
+                Some(next) => next.indent <= rule.indent,
+                None => true,
+            };
             if matched && leaf {
                 return Some((&self.mime_type, self.priority));
             }
@@ -289,10 +289,11 @@ pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
     let mut best = None;
     for entry in entries {
         if let Some((mime, priority)) = entry.matches(data) {
-            if best
-                .as_ref()
-                .map_or(true, |(_, old_priority)| priority > *old_priority)
-            {
+            let higher_priority = match &best {
+                Some((_, old_priority)) => priority > *old_priority,
+                None => true,
+            };
+            if higher_priority {
                 best = Some((mime.clone(), priority));
             }
         }

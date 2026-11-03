@@ -16,6 +16,18 @@ from the [icon theme][fdo-icon-theme].
 
 [Documentation][docs].
 
+`SharedMimeInfo::new()` follows the XDG data directories. For an isolated
+database, use `SharedMimeInfo::new_for_directories()` with data directories
+in descending precedence (each containing a `mime` subdirectory).
+Long-running applications should periodically call `reload()` to pick up
+changes made by `update-mime-database`.
+
+`lookup_description()` reads localized comments from the generated per-type
+XML files, with an explicit list of preferred languages. Comments are loaded
+on demand and cached until the database reloads. Other queries read the
+generated `globs2`, `magic`, aliases, subclasses and icon files; binary
+`mime.cache` loading is not yet implemented.
+
 Installation
 ------------
 
