@@ -64,6 +64,7 @@
 //! [`guess`]: struct.GuessBuilder.html#method.guess
 
 use mime::Mime;
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -94,6 +95,7 @@ pub struct SharedMimeInfo {
     generic_icons: Vec<icon::Icon>,
     globs: glob::GlobMap,
     magic: Vec<magic::MagicEntry>,
+    disabled_magic: HashSet<Mime>,
     mime_dirs: Vec<MimeDirectory>,
 }
 
@@ -509,6 +511,7 @@ impl SharedMimeInfo {
             generic_icons: Vec::new(),
             globs: glob::GlobMap::new(),
             magic: Vec::new(),
+            disabled_magic: HashSet::new(),
             mime_dirs: Vec::new(),
         }
     }
@@ -534,7 +537,7 @@ impl SharedMimeInfo {
         self.globs.add_globs(&globs);
 
         let magic_entries = magic::read_magic_from_dir(&mime_path);
-        self.magic.extend(magic_entries);
+        magic::add_entries(&mut self.magic, &mut self.disabled_magic, magic_entries);
 
         let mime_dir = match fs::metadata(&mime_path) {
             Ok(v) => {
@@ -628,6 +631,7 @@ impl SharedMimeInfo {
                 self.icons.clear();
                 self.generic_icons.clear();
                 self.magic.clear();
+                self.disabled_magic.clear();
 
                 break;
             }

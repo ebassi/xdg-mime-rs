@@ -7,6 +7,7 @@ use nom::multi::{many0, many1};
 use nom::number::complete::be_u16;
 use nom::sequence::tuple;
 use nom::IResult;
+use std::collections::HashSet;
 use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
@@ -52,7 +53,14 @@ fn masked_slices_are_equal(a: &[u8], b: &[u8], mask: &[u8]) -> bool {
 
 impl MagicRule {
     fn matches_data(&self, data: &[u8]) -> bool {
-        assert!(self.mask.is_none() || self.mask.as_ref().unwrap().len() == self.value.len());
+        if self.value.is_empty()
+            || self
+                .mask
+                .as_ref()
+                .is_some_and(|m| m.len() != self.value.len())
+        {
+            return false;
+        }
 
         let start = self.start_offset as usize;
         let range_length = self.range_length as usize;
@@ -74,7 +82,9 @@ impl MagicRule {
         let offset = self.start_offset as usize;
         let range_len = self.range_length as usize;
 
-        value_len + offset + range_len
+        value_len
+            .saturating_add(offset)
+            .saturating_add(range_len.saturating_sub(1))
     }
 }
 
@@ -151,13 +161,27 @@ fn magic_rule(bytes: &[u8]) -> IResult<&[u8], MagicRule> {
 
     let (bytes, _) = tag("=")(bytes)?;
     let (bytes, _value_length) = be_u16(bytes)?;
-    let (bytes, _value) = value(bytes, _value_length)?;
-    let (bytes, _mask) = mask(bytes, _value_length)?;
+    let (bytes, mut _value) = value(bytes, _value_length)?;
+    let (bytes, mut _mask) = mask(bytes, _value_length)?;
 
     let (bytes, _word_size) = word_size(bytes)?;
     let (bytes, _range_length) = range_length(bytes)?;
 
     let (bytes, _) = line_ending(bytes)?;
+
+    if cfg!(target_endian = "little") {
+        let size = _word_size.unwrap_or(1) as usize;
+        if size > 1 {
+            for word in _value.chunks_exact_mut(size) {
+                word.reverse();
+            }
+            if let Some(mask) = &mut _mask {
+                for word in mask.chunks_exact_mut(size) {
+                    word.reverse();
+                }
+            }
+        }
+    }
 
     Ok((
         bytes,
@@ -191,36 +215,28 @@ impl fmt::Debug for MagicEntry {
 
 impl MagicEntry {
     fn matches(&self, data: &[u8]) -> Option<(&Mime, u32)> {
-        let mut current_level = 0;
-
-        let mut iter = self.rules.iter().peekable();
-        while let Some(rule) = iter.next() {
-            // The rules are a flat list that represent a tree; the "indent"
-            // is the depth of the rule in the tree.
-            //
-            // Check the rule at the current level
-            if rule.indent == current_level && rule.matches_data(data) {
-                // If the next rule has a lower level, or it's the last
-                // rule, we found our match
-                match iter.peek() {
-                    Some(next) => {
-                        if next.indent <= current_level {
-                            return Some((&self.mime_type, self.priority));
-                        }
-
-                        // Otherwise, increase the level and check the
-                        // next rule
-                        current_level += 1;
-                    }
-                    None => {
-                        // last rule
-                        return Some((&self.mime_type, self.priority));
-                    }
-                };
+        let mut ancestors = Vec::new();
+        for (index, rule) in self.rules.iter().enumerate() {
+            let depth = rule.indent as usize;
+            if depth > ancestors.len() {
+                continue; // A malformed rule cannot invent missing ancestors.
+            }
+            ancestors.truncate(depth);
+            let matched = (depth == 0 || ancestors[depth - 1]) && rule.matches_data(data);
+            ancestors.push(matched);
+            let leaf = self
+                .rules
+                .get(index + 1)
+                .map_or(true, |next| next.indent <= rule.indent);
+            if matched && leaf {
+                return Some((&self.mime_type, self.priority));
             }
         }
-
         None
+    }
+
+    fn deletes_all(&self) -> bool {
+        self.rules.iter().any(|r| r.value == b"__NOMAGIC__")
     }
 
     fn max_extents(&self) -> usize {
@@ -270,10 +286,42 @@ fn from_u8_to_entries(bytes: &[u8]) -> IResult<&[u8], Vec<MagicEntry>> {
 }
 
 pub fn lookup_data(entries: &[MagicEntry], data: &[u8]) -> Option<(Mime, u32)> {
-    entries
+    let mut best = None;
+    for entry in entries {
+        if let Some((mime, priority)) = entry.matches(data) {
+            if best
+                .as_ref()
+                .map_or(true, |(_, old_priority)| priority > *old_priority)
+            {
+                best = Some((mime.clone(), priority));
+            }
+        }
+    }
+    best
+}
+
+// Load directories in descending XDG precedence. Delete-all markers affect
+// lower directories, but not other rules in the marker's own directory.
+pub fn add_entries(
+    entries: &mut Vec<MagicEntry>,
+    disabled: &mut HashSet<Mime>,
+    batch: Vec<MagicEntry>,
+) {
+    let markers: Vec<_> = batch
         .iter()
-        .find_map(|e| e.matches(data))
-        .map(|v| (v.0.clone(), v.1))
+        .filter(|e| e.deletes_all())
+        .map(|e| e.mime_type.clone())
+        .collect();
+    for mut entry in batch {
+        if disabled.contains(&entry.mime_type) {
+            continue;
+        }
+        entry.rules.retain(|r| r.value != b"__NOMAGIC__");
+        if !entry.rules.is_empty() {
+            entries.push(entry);
+        }
+    }
+    disabled.extend(markers);
 }
 
 pub fn max_extents(entries: &[MagicEntry]) -> usize {
@@ -292,7 +340,9 @@ pub fn read_magic_from_file<P: AsRef<Path>>(file_name: P) -> Vec<MagicEntry> {
 
     let mut magic_buf = Vec::<u8>::new();
 
-    f.read_to_end(&mut magic_buf).unwrap();
+    if f.read_to_end(&mut magic_buf).is_err() {
+        return Vec::new();
+    }
     match from_u8_to_entries(magic_buf.as_slice()) {
         Ok(v) => v.1,
         Err(_) => Vec::new(),
@@ -312,6 +362,50 @@ mod tests {
     use super::*;
     use nom::HexDisplay;
     use nom::Offset;
+
+    fn entries(bytes: &[u8]) -> Vec<MagicEntry> {
+        let (rest, entries) = from_u8_to_entries(bytes).unwrap();
+        assert!(rest.is_empty());
+        entries
+    }
+
+    #[test]
+    fn directory_overrides_and_global_priority() {
+        let mut rules = Vec::new();
+        let mut disabled = HashSet::new();
+        add_entries(&mut rules, &mut disabled, entries(b"MIME-Magic\0\n[0:text/plain]\n>0=\0\x0b__NOMAGIC__\n[50:text/plain]\n>0=\0\x03NEW\n[10:image/png]\n>0=\0\x04BOTH\n"));
+        add_entries(&mut rules, &mut disabled, entries(b"MIME-Magic\0\n[90:text/plain]\n>0=\0\x03OLD\n[80:application/pdf]\n>0=\0\x04BOTH\n"));
+        assert_eq!(lookup_data(&rules, b"OLD"), None);
+        assert_eq!(lookup_data(&rules, b"__NOMAGIC__"), None);
+        assert_eq!(lookup_data(&rules, b"NEW"), Some((mime::TEXT_PLAIN, 50)));
+        assert_eq!(
+            lookup_data(&rules, b"BOTH"),
+            Some((mime::APPLICATION_PDF, 80))
+        );
+    }
+
+    #[test]
+    fn failed_children_do_not_hide_sibling_roots_or_match_unrelated_children() {
+        let rules = entries(b"MIME-Magic\0\n[50:text/plain]\n>0=\0\x01A\n1>1=\0\x01B\n>0=\0\x01C\n1>1=\0\x01D\n>0=\0\x01A\n1>1=\0\x01E\n");
+        assert!(lookup_data(&rules, b"AB").is_some());
+        assert!(lookup_data(&rules, b"CD").is_some());
+        assert!(lookup_data(&rules, b"AE").is_some());
+        assert!(lookup_data(&rules, b"AD").is_none());
+        assert!(lookup_data(&rules, b"CB").is_none());
+    }
+
+    #[test]
+    fn empty_values_truncation_and_host_byte_order() {
+        let empty = entries(b"MIME-Magic\0\n[50:text/plain]\n>0=\0\0\n");
+        assert_eq!(lookup_data(&empty, b"anything"), None);
+        let rules = entries(b"MIME-Magic\0\n[50:text/plain]\n>0=\0\x02\x12\x34&\xff\xff~2\n");
+        let native = 0x1234u16.to_ne_bytes();
+        assert!(lookup_data(&rules, &native).is_some());
+        let data = include_bytes!("../test_files/parser/many_rules");
+        for end in 0..data.len() {
+            let _ = magic_entry(&data[..end]);
+        }
+    }
 
     #[test]
     fn parse_magic_header() {
