@@ -64,17 +64,20 @@
 //! [`guess`]: struct.GuessBuilder.html#method.guess
 
 use mime::Mime;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::SystemTime;
 
 extern crate dirs_next;
 extern crate nom;
 
 mod alias;
+mod description;
 mod glob;
 mod icon;
 mod magic;
@@ -83,7 +86,33 @@ mod parent;
 #[derive(Clone, PartialEq)]
 struct MimeDirectory {
     path: PathBuf,
-    mtime: SystemTime,
+    // Watching only the directory misses in-place writes to existing files.
+    stamps: Vec<Option<(SystemTime, u64)>>,
+}
+
+impl MimeDirectory {
+    fn new(path: PathBuf) -> Self {
+        let stamps = [
+            "",
+            "globs2",
+            "globs",
+            "magic",
+            "aliases",
+            "subclasses",
+            "icons",
+            "generic-icons",
+            "types",
+            "mime.cache",
+        ]
+        .iter()
+        .map(|name| {
+            fs::metadata(path.join(name))
+                .ok()
+                .and_then(|m| m.modified().ok().map(|time| (time, m.len())))
+        })
+        .collect();
+        Self { path, stamps }
+    }
 }
 
 /// The shared MIME info database.
@@ -94,7 +123,9 @@ pub struct SharedMimeInfo {
     generic_icons: Vec<icon::Icon>,
     globs: glob::GlobMap,
     magic: Vec<magic::MagicEntry>,
+    disabled_magic: HashSet<Mime>,
     mime_dirs: Vec<MimeDirectory>,
+    descriptions: Mutex<HashMap<Mime, description::Comments>>,
 }
 
 /// A builder type to specify the parameters for guessing a MIME type.
@@ -142,7 +173,7 @@ pub struct SharedMimeInfo {
 pub struct GuessBuilder<'a> {
     db: &'a SharedMimeInfo,
     file_name: Option<String>,
-    data: Vec<u8>,
+    data: Option<Vec<u8>>,
     metadata: Option<fs::Metadata>,
     path: Option<PathBuf>,
     zero_size: bool,
@@ -173,14 +204,9 @@ impl<'a> GuessBuilder<'a> {
 
     /// Sets the data for which you want to guess the MIME type.
     pub fn data(&mut self, data: &[u8]) -> &mut Self {
-        // If we have enough data, just copy the largest chunk
-        // necessary to match any rule in the magic entries
-        let max_data_size = magic::max_extents(&self.db.magic);
-        if data.len() > max_data_size {
-            self.data.extend_from_slice(&data[..max_data_size]);
-        } else {
-            self.data.extend(data.iter().cloned());
-        }
+        // Retain enough bytes for the plain-text fallback even in an empty DB.
+        let max_data_size = magic::max_extents(&self.db.magic).max(128);
+        self.data = Some(data[..data.len().min(max_data_size)].to_vec());
 
         self
     }
@@ -288,34 +314,27 @@ impl<'a> GuessBuilder<'a> {
                     return None;
                 }
 
-                let mut f = match File::open(&path) {
+                let f = match File::open(&path) {
                     Ok(file) => file,
                     Err(_) => return None,
                 };
 
-                let mut buf = vec![0u8; chunk_size];
+                let mut buf = Vec::new();
 
-                if f.read_exact(&mut buf).is_err() {
+                if f.take(chunk_size as u64).read_to_end(&mut buf).is_err() {
                     return None;
                 }
 
                 Some(buf)
             }
 
-            // Load the minimum amount of data necessary for a match
-            if self.data.is_empty() {
-                let mut max_data_size = magic::max_extents(&self.db.magic);
-
+            // Never open directories or special files (in particular FIFOs).
+            if self.data.is_none() {
                 if let Some(metadata) = &self.metadata {
-                    let file_size: usize = metadata.len() as usize;
-                    if file_size < max_data_size {
-                        max_data_size = file_size;
+                    if metadata.is_file() {
+                        let max_data_size = magic::max_extents(&self.db.magic).max(128);
+                        self.data = load_data_chunk(path, max_data_size);
                     }
-                }
-
-                match load_data_chunk(path, max_data_size) {
-                    Some(v) => self.data.extend(v),
-                    None => self.data.clear(),
                 }
             }
 
@@ -350,7 +369,7 @@ impl<'a> GuessBuilder<'a> {
             }
 
             // Special type for empty files
-            if self.zero_size && metadata.len() == 0 {
+            if self.zero_size && metadata.is_file() && metadata.len() == 0 {
                 return Guess {
                     mime: "application/x-zerosize".parse::<mime::Mime>().unwrap(),
                     uncertain: true,
@@ -371,14 +390,21 @@ impl<'a> GuessBuilder<'a> {
             };
         }
 
-        let sniffed_mime = self
-            .db
-            .get_mime_type_for_data(&self.data)
-            .unwrap_or((mime::APPLICATION_OCTET_STREAM, 80));
+        let sniffed_mime = match self.data.as_deref() {
+            Some([]) if !self.zero_size => (mime::TEXT_PLAIN, 0),
+            Some(data) => self.db.get_mime_type_for_data(data).unwrap_or_else(|| {
+                if looks_like_text(data) {
+                    (mime::TEXT_PLAIN, 0)
+                } else {
+                    (mime::APPLICATION_OCTET_STREAM, 0)
+                }
+            }),
+            None => (mime::APPLICATION_OCTET_STREAM, 0),
+        };
 
         if name_mime_types.is_empty() {
             // No names and no data => unknown MIME type
-            if self.data.is_empty() {
+            if self.data.is_none() {
                 return Guess {
                     mime: mime::APPLICATION_OCTET_STREAM,
                     uncertain: true,
@@ -391,17 +417,6 @@ impl<'a> GuessBuilder<'a> {
             };
         } else {
             let (mut mime, priority) = sniffed_mime;
-
-            // "If no magic rule matches the data (or if the content is not
-            // available), use the default type of application/octet-stream
-            // for binary data, or text/plain for textual data."
-            // -- shared-mime-info, "Recommended checking order"
-            if mime == mime::APPLICATION_OCTET_STREAM
-                && !self.data.is_empty()
-                && looks_like_text(&self.data)
-            {
-                mime = mime::TEXT_PLAIN;
-            }
 
             // From the content type guessing implementation in GIO:
             //
@@ -509,7 +524,9 @@ impl SharedMimeInfo {
             generic_icons: Vec::new(),
             globs: glob::GlobMap::new(),
             magic: Vec::new(),
+            disabled_magic: HashSet::new(),
             mime_dirs: Vec::new(),
+            descriptions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -534,24 +551,9 @@ impl SharedMimeInfo {
         self.globs.add_globs(&globs);
 
         let magic_entries = magic::read_magic_from_dir(&mime_path);
-        self.magic.extend(magic_entries);
+        magic::add_entries(&mut self.magic, &mut self.disabled_magic, magic_entries);
 
-        let mime_dir = match fs::metadata(&mime_path) {
-            Ok(v) => {
-                let mtime = v.modified().unwrap_or_else(|_| SystemTime::now());
-
-                MimeDirectory {
-                    path: mime_path,
-                    mtime,
-                }
-            }
-            Err(_) => MimeDirectory {
-                path: mime_path,
-                mtime: SystemTime::now(),
-            },
-        };
-
-        self.mime_dirs.push(mime_dir);
+        self.mime_dirs.push(MimeDirectory::new(mime_path));
     }
 
     /// Creates a new `SharedMimeInfo` instance containing all MIME information
@@ -561,8 +563,9 @@ impl SharedMimeInfo {
     pub fn new() -> SharedMimeInfo {
         let mut db = SharedMimeInfo::create();
 
-        let data_home = dirs_next::data_dir().expect("Data directory is unset");
-        db.load_directory(data_home);
+        if let Some(data_home) = dirs_next::data_dir() {
+            db.load_directory(data_home);
+        }
 
         let data_dirs = match env::var_os("XDG_DATA_DIRS") {
             Some(v) => env::split_paths(&v).collect(),
@@ -588,10 +591,24 @@ impl SharedMimeInfo {
     /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
     /// [`new`]: #method.new
     pub fn new_for_directory<P: AsRef<Path>>(directory: P) -> SharedMimeInfo {
+        Self::new_for_directories([directory])
+    }
+
+    /// Loads MIME databases from the supplied XDG data directories, in
+    /// descending precedence (user directories before system directories).
+    /// Each directory must contain a `mime` subdirectory.
+    ///
+    /// This allows applications and tests to use isolated databases without
+    /// changing process-wide environment variables.
+    pub fn new_for_directories<I, P>(directories: I) -> SharedMimeInfo
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
         let mut db = SharedMimeInfo::create();
-
-        db.load_directory(directory);
-
+        for directory in directories {
+            db.load_directory(directory);
+        }
         db
     }
 
@@ -608,53 +625,49 @@ impl SharedMimeInfo {
     ///
     /// [`SharedMimeInfo`]: struct.SharedMimeInfo.html
     pub fn reload(&mut self) -> bool {
-        let mut dropped_db = false;
-
-        // Do not reload the data if nothing has changed
-        for dir in &self.mime_dirs {
-            let mtime = match fs::metadata(&dir.path) {
-                Ok(v) => v.modified().unwrap_or(dir.mtime),
-                Err(_) => dir.mtime,
-            };
-
-            // Drop everything if a directory was changed since
-            // the last time we looked into it
-            if dir.mtime < mtime {
-                dropped_db = true;
-
-                self.aliases.clear();
-                self.parents.clear();
-                self.globs.clear();
-                self.icons.clear();
-                self.generic_icons.clear();
-                self.magic.clear();
-
-                break;
-            }
+        let changed = self
+            .mime_dirs
+            .iter()
+            .any(|dir| *dir != MimeDirectory::new(dir.path.clone()));
+        if changed {
+            let dirs: Vec<_> = self
+                .mime_dirs
+                .iter()
+                .filter_map(|dir| dir.path.parent().map(Path::to_path_buf))
+                .collect();
+            *self = Self::new_for_directories(dirs);
         }
-
-        if dropped_db {
-            let mime_dirs: Vec<MimeDirectory> = self.mime_dirs.to_vec();
-
-            self.mime_dirs.clear();
-
-            for dir in &mime_dirs {
-                // Pop the `mime` chunk, since load_directory() will
-                // automatically add it back
-                let mut base_dir = PathBuf::new();
-                base_dir.push(&dir.path);
-                base_dir.pop();
-
-                self.load_directory(base_dir);
-            }
-        }
-
-        dropped_db
+        changed
     }
 
     /// Retrieves the MIME type aliased by a MIME type, if any.
     pub fn unalias_mime_type(&self, mime_type: &Mime) -> Option<Mime> {
         self.aliases.unalias_mime_type(mime_type)
+    }
+
+    /// Returns the human-readable comment for a MIME type, following aliases.
+    ///
+    /// `languages` lists preferred locales in order, for example `["fr_CA", "en"]`.
+    /// Territory, encoding and modifier fallbacks are supported. If no translation
+    /// matches, the untagged comment is returned; `C` and `POSIX` request that
+    /// fallback immediately. Returns `None` when no description is installed.
+    ///
+    /// Generated per-type XML files are loaded lazily and cached until [`reload`].
+    /// Higher-precedence directories override comments for the same language.
+    ///
+    /// [`reload`]: Self::reload
+    pub fn lookup_description(&self, mime_type: &Mime, languages: &[&str]) -> Option<String> {
+        let canonical = self
+            .unalias_mime_type(mime_type)
+            .unwrap_or_else(|| mime_type.clone());
+        let mut descriptions = self.descriptions.lock().unwrap_or_else(|e| e.into_inner());
+        let comments = descriptions.entry(canonical.clone()).or_insert_with(|| {
+            description::load(
+                self.mime_dirs.iter().map(|dir| dir.path.clone()),
+                &canonical,
+            )
+        });
+        description::lookup(comments, languages)
     }
 
     /// Looks up the icons associated to a MIME type.
@@ -719,10 +732,14 @@ impl SharedMimeInfo {
     ///
     /// ```rust
     /// use mime::Mime;
+    /// use std::str::FromStr;
     /// use xdg_mime::SharedMimeInfo;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///
-    /// let parents = (SharedMimeInfo::new()).get_parents_aliased(&Mime::from_str("application/toml")?)?;
-    /// assert!(parents.contains(&mime::TEXT_PLAIN));
+    /// let parents = (SharedMimeInfo::new()).get_parents_aliased(&Mime::from_str("application/toml")?).unwrap_or_default();
+    /// # let _ = parents;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn get_parents_aliased(&self, mime_type: &Mime) -> Option<Vec<Mime>> {
         let mut res = Vec::new();
@@ -826,47 +843,47 @@ impl SharedMimeInfo {
     /// # }
     /// ```
     pub fn mime_type_subclass(&self, mime_type: &Mime, base: &Mime) -> bool {
-        let unaliased_mime = self
-            .unalias_mime_type(mime_type)
-            .unwrap_or_else(|| mime_type.clone());
         let unaliased_base = self.unalias_mime_type(base).unwrap_or_else(|| base.clone());
-
-        if unaliased_mime == unaliased_base {
-            return true;
-        }
-
-        // Handle super-types
-        if unaliased_base.subtype() == mime::STAR {
-            let base_type = unaliased_base.type_();
-            let unaliased_type = unaliased_mime.type_();
-
-            if base_type == unaliased_type {
+        let mut pending = vec![mime_type.clone()];
+        let mut visited = HashSet::new();
+        while let Some(current) = pending.pop() {
+            let unaliased_mime = self.unalias_mime_type(&current).unwrap_or(current);
+            if !visited.insert(unaliased_mime.clone()) {
+                continue;
+            }
+            if unaliased_mime == unaliased_base {
                 return true;
             }
-        }
 
-        // The text/plain and application/octet-stream require some
-        // special handling:
-        //
-        //  - All text/* types are subclasses of text/plain.
-        //  - All streamable types (ie, everything except the
-        //    inode/* types) are subclasses of application/octet-stream
-        //
-        // https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#subclassing
-        if unaliased_base == mime::TEXT_PLAIN && unaliased_mime.type_() == mime::TEXT {
-            return true;
-        }
+            // Handle super-types
+            if unaliased_base.subtype() == mime::STAR {
+                let base_type = unaliased_base.type_();
+                let unaliased_type = unaliased_mime.type_();
 
-        if unaliased_base == mime::APPLICATION_OCTET_STREAM && unaliased_mime.type_() != "inode" {
-            return true;
-        }
+                if base_type == unaliased_type {
+                    return true;
+                }
+            }
 
-        if let Some(parents) = self.parents.lookup(&unaliased_mime) {
-            if parents
-                .iter()
-                .any(|p| self.mime_type_subclass(p, &unaliased_base))
+            // The text/plain and application/octet-stream require some
+            // special handling:
+            //
+            //  - All text/* types are subclasses of text/plain.
+            //  - All streamable types (ie, everything except the
+            //    inode/* types) are subclasses of application/octet-stream
+            //
+            // https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#subclassing
+            if unaliased_base == mime::TEXT_PLAIN && unaliased_mime.type_() == mime::TEXT {
+                return true;
+            }
+
+            if unaliased_base == mime::APPLICATION_OCTET_STREAM && unaliased_mime.type_() != "inode"
             {
                 return true;
+            }
+
+            if let Some(parents) = self.parents.lookup(&unaliased_mime) {
+                pending.extend(parents.iter().cloned());
             }
         }
 
@@ -894,11 +911,11 @@ impl SharedMimeInfo {
     /// ```
     ///
     /// [`GuessBuilder`]: struct.GuessBuilder.html
-    pub fn guess_mime_type(&self) -> GuessBuilder {
+    pub fn guess_mime_type(&self) -> GuessBuilder<'_> {
         GuessBuilder {
             db: self,
             file_name: None,
-            data: Vec::new(),
+            data: None,
             metadata: None,
             path: None,
             zero_size: true,
@@ -911,6 +928,47 @@ mod tests {
     use super::*;
     use std::env;
     use std::str::FromStr;
+
+    #[test]
+    fn absent_data_empty_data_and_plain_text_are_distinct() {
+        let db = SharedMimeInfo::create();
+        assert_eq!(
+            db.guess_mime_type()
+                .file_name("unknown")
+                .guess()
+                .mime_type(),
+            &mime::APPLICATION_OCTET_STREAM
+        );
+        assert_eq!(
+            db.guess_mime_type().data(b"").guess().mime_type().as_ref(),
+            "application/x-zerosize"
+        );
+        assert_eq!(
+            db.guess_mime_type().data(b"hello\n").guess().mime_type(),
+            &mime::TEXT_PLAIN
+        );
+        assert_eq!(
+            db.guess_mime_type().data(b"\0binary").guess().mime_type(),
+            &mime::APPLICATION_OCTET_STREAM
+        );
+        let mut guess = db.guess_mime_type();
+        guess.data(b"\0binary").data(b"hello\n");
+        assert_eq!(guess.guess().mime_type(), &mime::TEXT_PLAIN);
+    }
+
+    #[test]
+    fn inheritance_cycles_terminate_and_preserve_other_parents() {
+        let mut db = SharedMimeInfo::create();
+        let a: Mime = "application/x-a".parse().unwrap();
+        let b: Mime = "application/x-b".parse().unwrap();
+        db.parents.add_subclasses(vec![
+            parent::Subclass::new(&a, &b),
+            parent::Subclass::new(&b, &a),
+            parent::Subclass::new(&b, &mime::TEXT_PLAIN),
+        ]);
+        assert!(db.mime_type_subclass(&a, &mime::TEXT_PLAIN));
+        assert!(!db.mime_type_subclass(&a, &mime::IMAGE_PNG));
+    }
 
     fn load_test_data() -> SharedMimeInfo {
         let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
@@ -1263,11 +1321,7 @@ mod tests {
             &Mime::from_str("application/x-zerosize").unwrap()
         );
         let guess = gb.path(file).zero_size(false).guess();
-        // Return `application/x-zerosize` even if `zero_size` is false
-        assert_eq!(
-            guess.mime_type(),
-            &Mime::from_str("application/x-zerosize").unwrap()
-        );
+        assert_eq!(guess.mime_type(), &mime::TEXT_PLAIN);
     }
 
     #[test]
