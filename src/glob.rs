@@ -165,26 +165,26 @@ impl Glob {
                 let a = UniCase::new(s);
                 let b = UniCase::new(file_name);
 
-                return a == b;
+                a == b
             }
             GlobType::Simple(s) => {
-                if file_name.ends_with(s) {
-                    return true;
+                let file_name_len = file_name.len();
+                let s_len = s.len();
+                if file_name_len < s_len {
+                    return false;
                 }
-
-                if !self.case_sensitive {
-                    let lc_file_name = file_name.to_lowercase();
-                    if lc_file_name.ends_with(s) {
-                        return true;
-                    }
-                }
+                file_name
+                    .get((file_name_len - s_len)..)
+                    .map_or(false, |file_name_end| {
+                        if self.case_sensitive {
+                            file_name_end == *s
+                        } else {
+                            file_name_end.eq_ignore_ascii_case(s)
+                        }
+                    })
             }
-            GlobType::Full(p) => {
-                return p.matches(file_name);
-            }
+            GlobType::Full(p) => p.matches(file_name),
         }
-
-        false
     }
 }
 
