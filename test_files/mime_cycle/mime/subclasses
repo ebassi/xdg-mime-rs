@@ -1,0 +1,8 @@
+# Cyclic subclass data for regression testing: opposite <parent> relations
+# between text/x-csrc and text/x-c++src (as produced when several
+# shared-mime-info databases that define the same types with different
+# parent chains are merged).
+text/x-c++src text/x-csrc
+text/x-csrc text/x-c++src
+text/x-objcsrc text/x-csrc
+text/x-csrc text/x-objcsrc

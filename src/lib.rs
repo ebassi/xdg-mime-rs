@@ -64,6 +64,7 @@
 //! [`guess`]: struct.GuessBuilder.html#method.guess
 
 use mime::Mime;
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -838,6 +839,21 @@ impl SharedMimeInfo {
     /// # }
     /// ```
     pub fn mime_type_subclass(&self, mime_type: &Mime, base: &Mime) -> bool {
+        // The subclass graph comes from untrusted shared-mime-info data, which
+        // can contain cycles (e.g. when several databases redefine the same
+        // types with opposite `<parent>` declarations). Keep track of the
+        // types already visited so the recursive lookup below terminates on
+        // such graphs instead of overflowing the stack.
+        let mut visited: HashSet<Mime> = HashSet::new();
+        self.mime_type_subclass_inner(mime_type, base, &mut visited)
+    }
+
+    fn mime_type_subclass_inner(
+        &self,
+        mime_type: &Mime,
+        base: &Mime,
+        visited: &mut HashSet<Mime>,
+    ) -> bool {
         let unaliased_mime = self
             .unalias_mime_type(mime_type)
             .unwrap_or_else(|| mime_type.clone());
@@ -845,6 +861,11 @@ impl SharedMimeInfo {
 
         if unaliased_mime == unaliased_base {
             return true;
+        }
+
+        // Stop if this type was already checked as part of the current lookup
+        if !visited.insert(unaliased_mime.clone()) {
+            return false;
         }
 
         // Handle super-types
@@ -876,7 +897,7 @@ impl SharedMimeInfo {
         if let Some(parents) = self.parents.lookup(&unaliased_mime) {
             if parents
                 .iter()
-                .any(|p| self.mime_type_subclass(p, &unaliased_base))
+                .any(|p| self.mime_type_subclass_inner(p, &unaliased_base, visited))
             {
                 return true;
             }
@@ -1164,6 +1185,28 @@ mod tests {
             ),
             true
         );
+    }
+
+    #[test]
+    fn mime_type_subclass_cycle() {
+        // Regression test: opposite parent relations between two types (as
+        // produced when databases defining the same types are merged) used to
+        // recurse infinitely and overflow the stack.
+        let cwd = env::current_dir().unwrap().to_string_lossy().into_owned();
+        let dir = PathBuf::from(&format!("{}/test_files/mime_cycle", cwd));
+        let mime_db = SharedMimeInfo::new_for_directory(dir);
+
+        let c: Mime = "text/x-csrc".parse().unwrap();
+        let cpp: Mime = "text/x-c++src".parse().unwrap();
+        let objc: Mime = "text/x-objcsrc".parse().unwrap();
+        let unrelated: Mime = "image/png".parse().unwrap();
+
+        // Reaching a type through the cycle is still a valid subclass relation
+        assert!(mime_db.mime_type_subclass(&c, &cpp));
+        assert!(mime_db.mime_type_subclass(&c, &objc));
+        // An unreachable type must return false instead of recursing forever
+        assert!(!mime_db.mime_type_subclass(&c, &unrelated));
+        assert!(!mime_db.mime_type_subclass(&unrelated, &c));
     }
 
     #[test]
